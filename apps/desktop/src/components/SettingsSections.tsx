@@ -9,6 +9,7 @@ import {
   HardDrive,
   Languages,
   Moon,
+  PanelRight,
   RefreshCw,
   RotateCcw,
   Save,
@@ -340,6 +341,11 @@ const titlebarActionOptions: Array<{
     icon: Code2,
     id: "sourceMode",
     labelKey: "app.switchToSourceMode"
+  },
+  {
+    icon: PanelRight,
+    id: "splitMode",
+    labelKey: "app.switchToSplitMode"
   },
   {
     icon: FolderOpen,

@@ -155,6 +155,7 @@ describe("Markra AI workspace", () => {
       markdownShortcuts: defaultMarkdownShortcuts,
       restoreWorkspaceOnStartup: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       showWordCount: true,
       suggestAiPanelForComplexInlinePrompts: false,
       titlebarActions: [

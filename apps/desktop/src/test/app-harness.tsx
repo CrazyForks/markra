@@ -143,6 +143,9 @@ vi.mock("../lib/settings/app-settings", () => ({
   createAiAgentSessionId: vi.fn(),
   consumeWelcomeDocumentState: vi.fn(),
   deleteStoredAiAgentSession: vi.fn(),
+  defaultSplitVisualPanePercent: 50,
+  splitVisualPanePercentMin: 25,
+  splitVisualPanePercentMax: 75,
   defaultEditorPreferences: {
     aiQuickActionPrompts: testAiQuickActionPrompts,
     aiSelectionDisplayMode: "command",
@@ -190,9 +193,11 @@ vi.mock("../lib/settings/app-settings", () => ({
     restoreWorkspaceOnStartup: true,
     suggestAiPanelForComplexInlinePrompts: true,
     showDocumentTabs: true,
+    splitVisualPanePercent: 50,
     titlebarActions: [
       { id: "aiAgent", visible: true },
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "theme", visible: true }
@@ -246,6 +251,7 @@ vi.mock("../lib/settings/app-settings", () => ({
   defaultTitlebarActions: [
     { id: "aiAgent", visible: true },
     { id: "sourceMode", visible: true },
+    { id: "splitMode", visible: true },
     { id: "open", visible: true },
     { id: "save", visible: true },
     { id: "theme", visible: true }
@@ -329,9 +335,11 @@ vi.mock("../lib/settings/app-settings", () => ({
     restoreWorkspaceOnStartup: true,
     suggestAiPanelForComplexInlinePrompts: true,
     showDocumentTabs: true,
+    splitVisualPanePercent: 50,
     titlebarActions: [
       { id: "aiAgent", visible: true },
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "theme", visible: true }
@@ -342,6 +350,7 @@ vi.mock("../lib/settings/app-settings", () => ({
   normalizeTitlebarActions: vi.fn((actions) => Array.isArray(actions) ? actions : [
     { id: "aiAgent", visible: true },
     { id: "sourceMode", visible: true },
+    { id: "splitMode", visible: true },
     { id: "open", visible: true },
     { id: "save", visible: true },
     { id: "theme", visible: true }
@@ -350,6 +359,7 @@ vi.mock("../lib/settings/app-settings", () => ({
     const normalized = Array.isArray(actions) ? actions : [
       { id: "aiAgent", visible: true },
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "theme", visible: true }
@@ -768,9 +778,11 @@ export function installAppTestHarness() {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }

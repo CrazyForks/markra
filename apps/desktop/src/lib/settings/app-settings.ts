@@ -12,8 +12,7 @@ import {
 } from "@markra/ai";
 import { defaultMarkdownShortcuts, normalizeMarkdownShortcuts, type MarkdownShortcutBindings } from "@markra/editor";
 import { createDefaultAiSettings, normalizeAiSettings, type AiProviderSettings } from "@markra/providers";
-import { isAppLanguage, type AppLanguage } from "@markra/shared";
-import { normalizeNullableString } from "@markra/shared";
+import { clampNumber, isAppLanguage, normalizeNullableString, type AppLanguage } from "@markra/shared";
 import { type WebSearchProviderId, type WebSearchSettings } from "@markra/ai";
 import {
   editorContentWidthOptions,
@@ -68,7 +67,7 @@ export const appThemeOptions = ["system", ...editorThemeOptions] as const;
 export type AppTheme = typeof appThemeOptions[number];
 export type PdfMarginPreset = "custom" | "default" | "narrow" | "none" | "normal" | "wide";
 export type PdfPageSize = "a4" | "custom" | "default" | "letter";
-export type TitlebarActionId = "aiAgent" | "sourceMode" | "open" | "save" | "theme";
+export type TitlebarActionId = "aiAgent" | "sourceMode" | "splitMode" | "open" | "save" | "theme";
 export type TitlebarActionPreference = {
   id: TitlebarActionId;
   visible: boolean;
@@ -115,6 +114,7 @@ export type EditorPreferences = {
   restoreWorkspaceOnStartup: boolean;
   suggestAiPanelForComplexInlinePrompts: boolean;
   showDocumentTabs: boolean;
+  splitVisualPanePercent: number;
   titlebarActions: TitlebarActionPreference[];
   showWordCount: boolean;
 };
@@ -174,10 +174,14 @@ export const defaultCustomThemeCss = `:root[data-theme="custom"] {
 export const defaultTitlebarActions: readonly TitlebarActionPreference[] = [
   { id: "aiAgent", visible: true },
   { id: "sourceMode", visible: true },
+  { id: "splitMode", visible: true },
   { id: "open", visible: true },
   { id: "save", visible: true },
   { id: "theme", visible: true }
 ];
+export const splitVisualPanePercentMin = 25;
+export const splitVisualPanePercentMax = 75;
+export const defaultSplitVisualPanePercent = 50;
 
 export const defaultImageUploadSettings: ImageUploadSettings = {
   fileNamePattern: "pasted-image-{timestamp}",
@@ -215,6 +219,7 @@ export const defaultEditorPreferences: EditorPreferences = {
   restoreWorkspaceOnStartup: true,
   suggestAiPanelForComplexInlinePrompts: true,
   showDocumentTabs: true,
+  splitVisualPanePercent: defaultSplitVisualPanePercent,
   titlebarActions: [...defaultTitlebarActions],
   showWordCount: true
 };
@@ -714,10 +719,18 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       typeof preferences.showDocumentTabs === "boolean"
         ? preferences.showDocumentTabs
         : defaultEditorPreferences.showDocumentTabs,
+    splitVisualPanePercent: normalizeSplitVisualPanePercent(preferences.splitVisualPanePercent),
     titlebarActions: normalizeTitlebarActions(preferences.titlebarActions),
     showWordCount:
       typeof preferences.showWordCount === "boolean" ? preferences.showWordCount : defaultEditorPreferences.showWordCount
   };
+}
+
+export function normalizeSplitVisualPanePercent(value: unknown) {
+  const percent = clampNumber(value, splitVisualPanePercentMin, splitVisualPanePercentMax);
+  if (percent === null) return defaultSplitVisualPanePercent;
+
+  return Math.round(percent);
 }
 
 export function normalizeTitlebarActions(value: unknown): TitlebarActionPreference[] {

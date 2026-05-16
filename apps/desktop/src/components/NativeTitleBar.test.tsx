@@ -246,6 +246,7 @@ describe("NativeTitleBar", () => {
         titlebarActions={[
           { id: "theme", visible: true },
           { id: "save", visible: false },
+          { id: "splitMode", visible: true },
           { id: "open", visible: true },
           { id: "aiAgent", visible: true },
           { id: "sourceMode", visible: true }
@@ -254,6 +255,7 @@ describe("NativeTitleBar", () => {
         onOpenMarkdown={() => {}}
         onSaveMarkdown={() => {}}
         onToggleMarkdownFiles={() => {}}
+        onToggleSplitMode={() => {}}
         onToggleSourceMode={() => {}}
         onToggleTheme={() => {}}
       />
@@ -265,6 +267,7 @@ describe("NativeTitleBar", () => {
 
     expect(actionLabels).toEqual([
       "Switch to dark theme",
+      "Switch to split mode",
       "Open Markdown or Folder",
       "Toggle Markra AI",
       "Switch to source mode"
@@ -312,7 +315,8 @@ describe("NativeTitleBar", () => {
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "aiAgent", visible: true },
-      { id: "theme", visible: true }
+      { id: "theme", visible: true },
+      { id: "splitMode", visible: true }
     ]);
   });
 
@@ -356,7 +360,8 @@ describe("NativeTitleBar", () => {
       { id: "save", visible: true },
       { id: "sourceMode", visible: true },
       { id: "open", visible: true },
-      { id: "theme", visible: true }
+      { id: "theme", visible: true },
+      { id: "splitMode", visible: true }
     ]);
   });
 

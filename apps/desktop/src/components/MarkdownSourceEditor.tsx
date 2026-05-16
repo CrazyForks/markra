@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties, type ChangeEvent, type ReactNode } from "react";
+import { Fragment, type CSSProperties, type ChangeEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import { parseMarkdownCalloutMarker, t, type AppLanguage } from "@markra/shared";
 import {
   editorContentWidthPixels,
@@ -22,6 +22,8 @@ type MarkdownSourceEditorProps = {
   onContentWidthChange?: (width: number) => unknown;
   onContentWidthResizeEnd?: () => unknown;
   onContentWidthResizeStart?: () => unknown;
+  onScroll?: (event: UIEvent<HTMLElement>) => unknown;
+  scrollRef?: Ref<HTMLElement>;
   topInset?: "tabs" | "titlebar";
 };
 
@@ -170,6 +172,8 @@ export function MarkdownSourceEditor({
   onContentWidthChange,
   onContentWidthResizeEnd,
   onContentWidthResizeStart,
+  onScroll,
+  scrollRef,
   topInset = "titlebar"
 }: MarkdownSourceEditorProps) {
   const resolvedContentWidth = contentWidthPx ?? editorContentWidthPixels[contentWidth];
@@ -187,6 +191,8 @@ export function MarkdownSourceEditor({
     <section
       className="paper-scroll h-full min-h-0 overflow-auto overscroll-none bg-transparent"
       aria-label={t(language, "app.writingSurface")}
+      onScroll={onScroll}
+      ref={scrollRef}
     >
       <article
         className={`markdown-source-paper relative mx-auto min-h-screen w-full max-w-215 px-18 pb-30 ${topInsetClassName} text-[16px] leading-[1.65] text-(--text-primary) caret-(--accent) outline-none focus:outline-none max-[900px]:px-5.25`}

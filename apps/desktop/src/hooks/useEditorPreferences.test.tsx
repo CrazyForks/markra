@@ -64,6 +64,7 @@ vi.mock("../lib/settings/app-settings", () => ({
     },
     restoreWorkspaceOnStartup: true,
     showDocumentTabs: true,
+    splitVisualPanePercent: 50,
     showWordCount: true
   },
   getStoredEditorPreferences: vi.fn()
@@ -139,6 +140,7 @@ describe("useEditorPreferences", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
@@ -214,6 +216,7 @@ describe("useEditorPreferences", () => {
         restoreWorkspaceOnStartup: false,
         suggestAiPanelForComplexInlinePrompts: true,
         showDocumentTabs: false,
+        splitVisualPanePercent: 64,
         titlebarActions: [
           { id: "theme", visible: true },
           { id: "save", visible: false },

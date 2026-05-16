@@ -647,6 +647,7 @@ describe("EditorSettings", () => {
         { id: "theme", visible: true },
         { id: "save", visible: false },
         { id: "open", visible: true },
+        { id: "splitMode", visible: true },
         { id: "sourceMode", visible: true },
         { id: "aiAgent", visible: true }
       ]
@@ -667,6 +668,7 @@ describe("EditorSettings", () => {
       "Switch to dark theme",
       "Save Markdown",
       "Open Markdown or Folder",
+      "Switch to split mode",
       "Switch to source mode",
       "Toggle Markra AI"
     ]);
@@ -687,13 +689,14 @@ describe("EditorSettings", () => {
         { id: "theme", visible: true },
         { id: "save", visible: true },
         { id: "open", visible: true },
+        { id: "splitMode", visible: true },
         { id: "sourceMode", visible: true },
         { id: "aiAgent", visible: true }
       ]
     });
 
     const themeButton = screen.getByRole("button", { name: "Switch to dark theme" });
-    mockTitlebarActionRects(["theme", "save", "open", "sourceMode", "aiAgent"]);
+    mockTitlebarActionRects(["theme", "save", "open", "splitMode", "sourceMode", "aiAgent"]);
 
     fireEvent.mouseDown(themeButton, { button: 0, clientX: 10, clientY: 10 });
     fireEvent.mouseMove(document, { buttons: 1, clientX: 20, clientY: 10 });
@@ -707,6 +710,7 @@ describe("EditorSettings", () => {
         { id: "save", visible: false },
         { id: "open", visible: true },
         { id: "theme", visible: true },
+        { id: "splitMode", visible: true },
         { id: "sourceMode", visible: true },
         { id: "aiAgent", visible: true }
       ]
@@ -728,9 +732,10 @@ describe("EditorSettings", () => {
       ...preferences,
       titlebarActions: [
         { id: "theme", visible: true },
-        { id: "sourceMode", visible: true },
         { id: "save", visible: false },
+        { id: "sourceMode", visible: true },
         { id: "open", visible: true },
+        { id: "splitMode", visible: true },
         { id: "aiAgent", visible: true }
       ]
     });
@@ -742,6 +747,7 @@ describe("EditorSettings", () => {
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }

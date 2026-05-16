@@ -182,9 +182,11 @@ describe("app settings", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -420,9 +422,11 @@ describe("app settings", () => {
       restoreWorkspaceOnStartup: false,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -446,7 +450,8 @@ describe("app settings", () => {
       { id: "theme", visible: true },
       { id: "aiAgent", visible: true },
       { id: "open", visible: true },
-      { id: "sourceMode", visible: true }
+      { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true }
     ]);
   });
 
@@ -483,6 +488,7 @@ describe("app settings", () => {
     const actions = [
       { id: "aiAgent", visible: true },
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "theme", visible: true }
@@ -490,6 +496,7 @@ describe("app settings", () => {
 
     expect(reorderTitlebarActions(actions, "aiAgent", "save")).toEqual([
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "save", visible: true },
       { id: "aiAgent", visible: true },
@@ -499,6 +506,7 @@ describe("app settings", () => {
       { id: "aiAgent", visible: true },
       { id: "save", visible: true },
       { id: "sourceMode", visible: true },
+      { id: "splitMode", visible: true },
       { id: "open", visible: true },
       { id: "theme", visible: true }
     ]);
@@ -525,6 +533,13 @@ describe("app settings", () => {
     expect(normalizeEditorPreferences({ contentWidthPx: 320 }).contentWidthPx).toBe(640);
     expect(normalizeEditorPreferences({ contentWidthPx: 2000 }).contentWidthPx).toBe(1280);
     expect(normalizeEditorPreferences({ contentWidthPx: "wide" }).contentWidthPx).toBeNull();
+  });
+
+  it("normalizes split pane visual width percentages", () => {
+    expect(normalizeEditorPreferences({ splitVisualPanePercent: 64 }).splitVisualPanePercent).toBe(64);
+    expect(normalizeEditorPreferences({ splitVisualPanePercent: 10 }).splitVisualPanePercent).toBe(25);
+    expect(normalizeEditorPreferences({ splitVisualPanePercent: 90 }).splitVisualPanePercent).toBe(75);
+    expect(normalizeEditorPreferences({ splitVisualPanePercent: "wide" }).splitVisualPanePercent).toBe(50);
   });
 
   it("migrates previous app shortcut defaults to the current defaults", () => {
@@ -665,9 +680,11 @@ describe("app settings", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -714,11 +731,13 @@ describe("app settings", () => {
       restoreWorkspaceOnStartup: false,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: false,
+      splitVisualPanePercent: 64,
       titlebarActions: [
         { id: "theme", visible: true },
         { id: "save", visible: false },
         { id: "open", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "aiAgent", visible: true }
       ],
       showWordCount: false
@@ -761,11 +780,13 @@ describe("app settings", () => {
       restoreWorkspaceOnStartup: false,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: false,
+      splitVisualPanePercent: 64,
       titlebarActions: [
         { id: "theme", visible: true },
         { id: "save", visible: false },
         { id: "open", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "aiAgent", visible: true }
       ],
       showWordCount: false

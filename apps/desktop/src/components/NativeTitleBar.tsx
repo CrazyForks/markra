@@ -62,6 +62,7 @@ type NativeTitleBarProps = {
   platform?: DesktopPlatform;
   quickCreateMarkdownFileVisible?: boolean;
   saveDisabled?: boolean;
+  splitMode?: boolean;
   sourceMode?: boolean;
   sourceModeDisabled?: boolean;
   theme: ResolvedAppTheme;
@@ -74,6 +75,7 @@ type NativeTitleBarProps = {
   onTitlebarActionsChange?: (actions: TitlebarActionPreference[]) => unknown;
   onToggleAiAgent: () => unknown;
   onToggleMarkdownFiles: () => unknown;
+  onToggleSplitMode?: () => unknown;
   onToggleSourceMode?: () => unknown;
   onToggleTheme: () => unknown;
 };
@@ -100,6 +102,7 @@ export function NativeTitleBar({
   platform = resolveDesktopPlatform(),
   quickCreateMarkdownFileVisible = false,
   saveDisabled = false,
+  splitMode = false,
   sourceMode = false,
   sourceModeDisabled = false,
   theme,
@@ -112,6 +115,7 @@ export function NativeTitleBar({
   onTitlebarActionsChange,
   onToggleAiAgent,
   onToggleMarkdownFiles,
+  onToggleSplitMode,
   onToggleSourceMode,
   onToggleTheme
 }: NativeTitleBarProps) {
@@ -122,6 +126,7 @@ export function NativeTitleBar({
   const label = (key: Parameters<typeof t>[1]) => t(language, key);
   const themeActionLabel = theme === "dark" ? label("app.switchToLightTheme") : label("app.switchToDarkTheme");
   const splitOpenChoiceAvailable = platform !== "macos" && Boolean(onOpenMarkdownFolder);
+  const titlebarSideSlotWidth = 164;
   const normalizedTitlebarActions = useMemo(() => normalizeTitlebarActions(titlebarActions), [titlebarActions]);
   const visibleTitlebarActionIds = useMemo(
     () => normalizedTitlebarActions.filter((action) => action.visible).map((action) => action.id),
@@ -295,25 +300,21 @@ export function NativeTitleBar({
     if (id === "sourceMode") {
       if (!onToggleSourceMode) return null;
 
-      if (sourceMode) {
-        return (
-          <IconButton
-            className={mergeClassNames(
-              "bg-(--bg-active) text-(--text-heading) opacity-100 disabled:opacity-35",
-              sortable.actionClassName
-            )}
-            disabled={sourceModeDisabled}
-            label={label("app.switchToVisualMode")}
-            onClick={(event) => handleTitlebarActionClick("sourceMode", event, onToggleSourceMode)}
-            {...sortable.actionAttributes}
-            {...sortable.actionListeners}
-          >
-            <Eye aria-hidden="true" size={15} />
-          </IconButton>
-        );
-      }
-
-      return (
+      return sourceMode ? (
+        <IconButton
+          className={mergeClassNames(
+            "bg-(--bg-active) text-(--text-heading) opacity-100 disabled:opacity-35",
+            sortable.actionClassName
+          )}
+          disabled={sourceModeDisabled}
+          label={label("app.switchToVisualMode")}
+          onClick={(event) => handleTitlebarActionClick("sourceMode", event, onToggleSourceMode)}
+          {...sortable.actionAttributes}
+          {...sortable.actionListeners}
+        >
+          <Eye aria-hidden="true" size={15} />
+        </IconButton>
+      ) : (
         <IconButton
           className={mergeClassNames("disabled:opacity-35", sortable.actionClassName)}
           disabled={sourceModeDisabled}
@@ -323,6 +324,28 @@ export function NativeTitleBar({
           {...sortable.actionListeners}
         >
           <Code2 aria-hidden="true" size={15} />
+        </IconButton>
+      );
+    }
+
+    if (id === "splitMode") {
+      if (!onToggleSplitMode) return null;
+
+      return (
+        <IconButton
+          className={mergeClassNames(
+            splitMode ? "bg-(--bg-active) text-(--text-heading) opacity-100" : "",
+            "disabled:opacity-35",
+            sortable.actionClassName
+          )}
+          disabled={sourceModeDisabled}
+          label={splitMode ? label("app.closeSplitMode") : label("app.switchToSplitMode")}
+          pressed={splitMode}
+          onClick={(event) => handleTitlebarActionClick("splitMode", event, onToggleSplitMode)}
+          {...sortable.actionAttributes}
+          {...sortable.actionListeners}
+        >
+          <PanelRight aria-hidden="true" size={15} />
         </IconButton>
       );
     }
@@ -405,6 +428,10 @@ export function NativeTitleBar({
       background: `linear-gradient(to right, var(--bg-secondary) 0 ${markdownFilesWidth}px, var(--bg-primary) ${markdownFilesWidth}px 100%)`
     }
     : undefined;
+  const titlebarGridStyle: CSSProperties = {
+    ...(titlebarSurfaceStyle ?? {}),
+    gridTemplateColumns: `${titlebarSideSlotWidth}px minmax(0,1fr) ${titlebarSideSlotWidth}px`
+  };
 
   const renderTitleContent = (className: string, style?: CSSProperties) => (
     <div className={className} style={style} data-tauri-drag-region>
@@ -421,8 +448,9 @@ export function NativeTitleBar({
 
   if (platform === "windows") {
     if (titleContent) {
-      const windowsTitlebarStyle: CSSProperties | undefined = {
-        ...(markdownFilesOpen ? { left: markdownFilesWidth } : {})
+      const windowsTitlebarStyle: CSSProperties = {
+        ...(markdownFilesOpen ? { left: markdownFilesWidth } : {}),
+        gridTemplateColumns: `minmax(0,1fr) ${titlebarSideSlotWidth}px`
       };
 
       return (
@@ -457,7 +485,6 @@ export function NativeTitleBar({
   const editorRightInset = aiAgentOpen ? aiAgentWidth : 0;
   const titleOffset = (editorLeftInset - editorRightInset) / 2;
   const titleTransform = titleOffset === 0 ? undefined : `translateX(${titleOffset}px)`;
-  const titlebarSideSlotWidth = 164;
   const titleContentSlotStyle: CSSProperties = {
     ...(editorLeftInset > titlebarSideSlotWidth ? { marginLeft: editorLeftInset - titlebarSideSlotWidth } : {}),
     ...(editorRightInset > titlebarSideSlotWidth ? { marginRight: editorRightInset - titlebarSideSlotWidth } : {})
@@ -478,7 +505,7 @@ export function NativeTitleBar({
   return (
     <header
       className={`native-titlebar group/titlebar fixed inset-x-0 top-0 z-8 grid h-10 grid-cols-[164px_minmax(0,1fr)_164px] select-none items-center ${titlebarSurfaceClassName} [-webkit-user-select:none]`}
-      style={titlebarSurfaceStyle}
+      style={titlebarGridStyle}
       aria-label={label("app.windowDragRegion")}
       data-tauri-drag-region
     >

@@ -312,6 +312,35 @@ export function useEditorController() {
     }
   }, []);
 
+  const replaceMarkdown = useCallback((markdown: string) => {
+    try {
+      const editor = editorRef.current;
+      if (!editor) return false;
+
+      return editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const parseMarkdown = ctx.get(parserCtx);
+        const serializer = ctx.get(serializerCtx);
+        const link = linkSchema.type(ctx);
+        const image = imageSchema.type(ctx);
+        const currentMarkdown = serializeLinkImageLiveMarkdown(view.state.doc, serializer, link, image);
+        if (comparableSerializedMarkdown(currentMarkdown) === comparableSerializedMarkdown(markdown)) return true;
+
+        const parsedDocument = parseMarkdown(markdown);
+        const selectionPosition = Math.min(view.state.selection.from, parsedDocument.content.size);
+        const tr = view.state.tr
+          .replace(0, view.state.doc.content.size, new Slice(parsedDocument.content, 0, 0))
+          .setMeta("addToHistory", false);
+
+        tr.setSelection(TextSelection.near(tr.doc.resolve(selectionPosition))).scrollIntoView();
+        view.dispatch(tr);
+        return true;
+      });
+    } catch {
+      return false;
+    }
+  }, []);
+
   const getSelection = useCallback((): AiSelectionContext | null => {
     try {
       const view = editorRef.current?.action((ctx) => ctx.get(editorViewCtx));
@@ -654,6 +683,7 @@ export function useEditorController() {
     insertMarkdownTable,
     listAiPreviews,
     previewAiResult,
+    replaceMarkdown,
     runEditorShortcut,
     scrollAiSelectionAboveCommand,
     scrollToAiPreview,
