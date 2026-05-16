@@ -153,9 +153,9 @@ export const defaultCustomThemeCss = `:root[data-theme="custom"] {
   --text-md-char: #818b98;
   --border-default: #d1d9e0;
   --border-strong: #d1d9e0;
-  --accent: #0969da;
-  --accent-soft: rgba(9, 105, 218, 0.12);
-  --accent-hover: #0550ae;
+  --accent: #1a1c1e;
+  --accent-soft: rgba(26, 28, 30, 0.1);
+  --accent-hover: #0f1115;
 }
 
 :root[data-theme="custom"] .markdown-paper[data-editor-theme="custom"] {

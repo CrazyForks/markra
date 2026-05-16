@@ -130,7 +130,7 @@ type ThemePreviewStyle = CSSProperties & {
 
 const themePreviewSwatches: Record<AppTheme, ThemePreviewSwatch> = {
   system: {
-    accent: "#0969da",
+    accent: "#1a1c1e",
     background: "linear-gradient(135deg, #f6f8fa 0 49%, #1f2328 50% 100%)",
     border: "#d1d9e0",
     muted: "#59636e",
@@ -138,7 +138,7 @@ const themePreviewSwatches: Record<AppTheme, ThemePreviewSwatch> = {
     text: "#1f2328"
   },
   light: {
-    accent: "#0969da",
+    accent: "#1a1c1e",
     background: "#ffffff",
     border: "#d1d9e0",
     muted: "#59636e",
@@ -146,7 +146,7 @@ const themePreviewSwatches: Record<AppTheme, ThemePreviewSwatch> = {
     text: "#1f2328"
   },
   dark: {
-    accent: "#58a6ff",
+    accent: "#f4f4f5",
     background: "#0d1117",
     border: "#30363d",
     muted: "#8b949e",
@@ -178,7 +178,7 @@ const themePreviewSwatches: Record<AppTheme, ThemePreviewSwatch> = {
     text: "#241f1a"
   },
   night: {
-    accent: "#67e8f9",
+    accent: "#f4f4f5",
     background: "#111827",
     border: "#374151",
     muted: "#9ca3af",
@@ -266,7 +266,7 @@ const themePreviewSwatches: Record<AppTheme, ThemePreviewSwatch> = {
     text: "#27272a"
   },
   custom: {
-    accent: "#0969da",
+    accent: "#1a1c1e",
     background: "#ffffff",
     border: "#d1d9e0",
     muted: "#59636e",

@@ -166,7 +166,7 @@ export function AiProviderSettingsPanel({
                 </span>
               ) : null}
               <button
-                className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-(--accent) bg-(--accent) px-4 text-[13px] leading-5 font-bold text-(--bg-primary) shadow-[0_8px_20px_rgba(63,102,216,0.24)] transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:bg-(--accent-hover) hover:border-(--accent-hover) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+                className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-(--accent) bg-(--accent) px-4 text-[13px] leading-5 font-bold text-(--bg-primary) shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_20%,transparent)] transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:bg-(--accent-hover) hover:border-(--accent-hover) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
                 type="button"
                 aria-label={translate("settings.ai.saveProviders")}
                 onClick={onSave}
