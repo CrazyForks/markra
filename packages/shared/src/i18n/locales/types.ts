@@ -273,6 +273,8 @@ export type I18nKey =
   | "app.unsavedChanges"
   | "app.documentTabs"
   | "app.closeDocumentTab"
+  | "app.closeOtherDocumentTabs"
+  | "app.closeDocumentTabsToRight"
   | "app.newDocumentTab"
   | "app.toggleMarkdownFiles"
   | "app.aiAgent"

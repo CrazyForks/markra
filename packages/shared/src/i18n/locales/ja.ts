@@ -156,6 +156,8 @@ const messages: LocaleMessages = {
   "app.unsavedChanges": "未保存の変更",
   "app.documentTabs": "開いているドキュメント",
   "app.closeDocumentTab": "タブを閉じる",
+  "app.closeOtherDocumentTabs": "他のタブを閉じる",
+  "app.closeDocumentTabsToRight": "右側のタブを閉じる",
   "app.newDocumentTab": "新しいタブ",
   "app.toggleMarkdownFiles": "ファイルリストを切り替え",
   "app.aiAgent": "Markra AI",

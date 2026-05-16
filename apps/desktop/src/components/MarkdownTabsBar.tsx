@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { FileText, ImageIcon, Plus, X } from "lucide-react";
-import { IconButton } from "@markra/ui";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { FileText, ImageIcon, Pencil, Plus, X } from "lucide-react";
+import { Button, IconButton, PopoverSurface } from "@markra/ui";
 import { t, type AppLanguage } from "@markra/shared";
 import type { MarkdownDocumentTab } from "../hooks/useMarkdownDocument";
 
@@ -20,6 +20,12 @@ type MarkdownTabsBarProps = {
   onSelectTab: (tabId: string) => unknown;
 };
 
+type TabContextMenuState = {
+  tabId: string;
+  x: number;
+  y: number;
+};
+
 export function MarkdownTabsBar({
   activeTabId,
   language = "en",
@@ -35,6 +41,8 @@ export function MarkdownTabsBar({
   const [renameFileName, setRenameFileName] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameCancelledRef = useRef(false);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<TabContextMenuState | null>(null);
 
   useEffect(() => {
     if (!renameInputRef.current) return;
@@ -43,9 +51,32 @@ export function MarkdownTabsBar({
     renameInputRef.current.select();
   }, [renamingTabId]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
   if (tabs.length === 0) return null;
 
   const titlebarPlacement = placement === "titlebar";
+  const contextMenuTab = contextMenu ? tabs.find((tab) => tab.id === contextMenu.tabId) ?? null : null;
+  const contextMenuTabIndex = contextMenuTab ? tabs.findIndex((tab) => tab.id === contextMenuTab.id) : -1;
+  const contextMenuOtherTabIds = contextMenuTab ? tabs.filter((tab) => tab.id !== contextMenuTab.id).map((tab) => tab.id) : [];
+  const contextMenuRightTabIds = contextMenuTabIndex >= 0 ? tabs.slice(contextMenuTabIndex + 1).map((tab) => tab.id) : [];
   const startRenamingTab = (tab: MarkdownTabsBarItem) => {
     if (!tab.path || !onRenameTab) return;
 
@@ -70,6 +101,28 @@ export function MarkdownTabsBar({
     if (!normalizedName || normalizedName === tab.name) return;
 
     onRenameTab?.(tab, normalizedName);
+  };
+  const closeTabs = (tabIds: string[]) => {
+    let closeSequence: Promise<unknown> = Promise.resolve(null);
+
+    for (const tabId of tabIds) {
+      closeSequence = closeSequence.then(() => onCloseTab(tabId));
+    }
+
+    closeSequence.catch(() => {});
+  };
+  const openTabContextMenu = (event: ReactMouseEvent, tab: MarkdownTabsBarItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      tabId: tab.id,
+      x: Math.max(8, event.clientX),
+      y: Math.max(8, event.clientY)
+    });
+  };
+  const runTabContextMenuAction = (action: () => unknown) => {
+    setContextMenu(null);
+    action();
   };
 
   return (
@@ -104,6 +157,7 @@ export function MarkdownTabsBar({
                   : "border-transparent bg-transparent text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading)"
               }`}
               key={tab.id}
+              onContextMenu={(event) => openTabContextMenu(event, tab)}
             >
               {renaming ? (
                 <div className="flex h-full min-w-0 items-center gap-1.5 rounded-l-md px-2">
@@ -152,7 +206,7 @@ export function MarkdownTabsBar({
                 }`}
                 type="button"
                 aria-label={`${label("app.closeDocumentTab")} ${tab.name || "Untitled.md"}`}
-                onClick={() => onCloseTab(tab.id)}
+                onClick={() => closeTabs([tab.id])}
               >
                 <X aria-hidden="true" size={12} />
               </button>
@@ -175,6 +229,69 @@ export function MarkdownTabsBar({
           />
         ) : null}
       </div>
+      {contextMenu && contextMenuTab ? (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y
+          }}
+        >
+          <PopoverSurface
+            className="grid w-52 gap-1 rounded-lg p-1 text-[12px] leading-5 font-[560]"
+            open
+            role="menu"
+            aria-label={contextMenuTab.name || "Untitled.md"}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            {onRenameTab && contextMenuTab.path ? (
+              <Button
+                className="w-full justify-start rounded-md text-left"
+                size="sm"
+                variant="ghost"
+                role="menuitem"
+                onClick={() => runTabContextMenuAction(() => startRenamingTab(contextMenuTab))}
+              >
+                <Pencil aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
+                <span className="truncate">{label("app.renameMarkdownFile")}</span>
+              </Button>
+            ) : null}
+            <Button
+              className="w-full justify-start rounded-md text-left"
+              size="sm"
+              variant="ghost"
+              role="menuitem"
+              onClick={() => runTabContextMenuAction(() => closeTabs([contextMenuTab.id]))}
+            >
+              <X aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
+              <span className="truncate">{label("app.closeDocumentTab")}</span>
+            </Button>
+            <Button
+              className="w-full justify-start rounded-md text-left"
+              disabled={contextMenuOtherTabIds.length === 0}
+              size="sm"
+              variant="ghost"
+              role="menuitem"
+              onClick={() => runTabContextMenuAction(() => closeTabs(contextMenuOtherTabIds))}
+            >
+              <X aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
+              <span className="truncate">{label("app.closeOtherDocumentTabs")}</span>
+            </Button>
+            <Button
+              className="w-full justify-start rounded-md text-left"
+              disabled={contextMenuRightTabIds.length === 0}
+              size="sm"
+              variant="ghost"
+              role="menuitem"
+              onClick={() => runTabContextMenuAction(() => closeTabs(contextMenuRightTabIds))}
+            >
+              <X aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
+              <span className="truncate">{label("app.closeDocumentTabsToRight")}</span>
+            </Button>
+          </PopoverSurface>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -262,6 +262,8 @@ const messages: BaseLocaleMessages = {
   "app.unsavedChanges": "Unsaved changes",
   "app.documentTabs": "Open documents",
   "app.closeDocumentTab": "Close tab",
+  "app.closeOtherDocumentTabs": "Close other tabs",
+  "app.closeDocumentTabsToRight": "Close tabs to the right",
   "app.newDocumentTab": "New tab",
   "app.toggleMarkdownFiles": "Toggle file list",
   "app.aiAgent": "Markra AI",
