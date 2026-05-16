@@ -1254,7 +1254,7 @@ export default function App() {
     };
   }, [editor, restoreAiCommand, updateAiResults]);
 
-  const handleCloseTitlebarTab = useCallback((tabId: string) => {
+  const handleCloseTitlebarTab = useCallback(async (tabId: string) => {
     const imageTab = imageTabs.find((tab) => tab.id === tabId);
     if (imageTab) {
       const closingActiveImage = activeImageFile ? imageDocumentTabId(activeImageFile.path) === tabId : false;
@@ -1262,15 +1262,15 @@ export default function App() {
       if (closingActiveImage) setActiveImageFile(null);
       updateActiveAiSelection(null);
       handleAiCommandClose();
-      return;
+      return true;
     }
 
-    closeMarkdownTab(tabId).then((closed) => {
-      if (!closed) return;
+    const closed = await closeMarkdownTab(tabId);
+    if (!closed) return false;
 
-      updateActiveAiSelection(null);
-      handleAiCommandClose();
-    }).catch(() => {});
+    updateActiveAiSelection(null);
+    handleAiCommandClose();
+    return true;
   }, [
     activeImageFile,
     closeMarkdownTab,

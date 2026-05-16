@@ -262,6 +262,8 @@ const messages: LocaleMessages = {
   "app.unsavedChanges": "未保存的更改",
   "app.documentTabs": "打开的文档",
   "app.closeDocumentTab": "关闭标签页",
+  "app.closeOtherDocumentTabs": "关闭其他标签页",
+  "app.closeDocumentTabsToRight": "关闭右侧标签页",
   "app.newDocumentTab": "新建标签页",
   "app.toggleMarkdownFiles": "切换文件列表",
   "app.aiAgent": "Markra AI",

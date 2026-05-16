@@ -150,6 +150,8 @@ const messages: LocaleMessages = {
   "app.unsavedChanges": "Nicht gespeicherte Änderungen",
   "app.documentTabs": "Geöffnete Dokumente",
   "app.closeDocumentTab": "Tab schließen",
+  "app.closeOtherDocumentTabs": "Andere Tabs schließen",
+  "app.closeDocumentTabsToRight": "Tabs rechts schließen",
   "app.newDocumentTab": "Neuer Tab",
   "app.toggleMarkdownFiles": "Dateiliste umschalten",
   "app.aiAgent": "Markra AI",

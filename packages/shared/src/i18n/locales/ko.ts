@@ -150,6 +150,8 @@ const messages: LocaleMessages = {
   "app.unsavedChanges": "저장되지 않은 변경 사항",
   "app.documentTabs": "열린 문서",
   "app.closeDocumentTab": "탭 닫기",
+  "app.closeOtherDocumentTabs": "다른 탭 닫기",
+  "app.closeDocumentTabsToRight": "오른쪽 탭 닫기",
   "app.newDocumentTab": "새 탭",
   "app.toggleMarkdownFiles": "파일 목록 전환",
   "app.aiAgent": "Markra AI",
