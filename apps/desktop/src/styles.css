@@ -172,6 +172,7 @@
     --accent: #1a1c1e;
     --accent-soft: rgba(26, 28, 30, 0.1);
     --accent-hover: #0f1115;
+    --link-color: #2f56c6;
 
     --ai-command-shadow: 0 18px 52px rgba(0, 0, 0, 0.12);
     --ai-command-expanded-shadow: 0 20px 64px rgba(0, 0, 0, 0.16);
@@ -216,6 +217,7 @@
     --accent: #f4f4f5;
     --accent-soft: rgba(244, 244, 245, 0.14);
     --accent-hover: #fafafa;
+    --link-color: #b7c5ff;
 
     --ai-command-shadow:
       0 24px 64px rgba(0, 0, 0, 0.64),
@@ -264,6 +266,7 @@
     --accent: #0969da;
     --accent-soft: rgba(9, 105, 218, 0.12);
     --accent-hover: #0550ae;
+    --link-color: #0550ae;
   }
 
   [data-theme="gothic"] {
@@ -283,6 +286,7 @@
     --accent: oklch(43% 0.13 31);
     --accent-soft: oklch(43% 0.13 31 / 0.12);
     --accent-hover: oklch(36% 0.14 31);
+    --link-color: oklch(36% 0.14 31);
   }
 
   [data-theme="newsprint"] {
@@ -302,6 +306,7 @@
     --accent: oklch(42% 0.12 24);
     --accent-soft: oklch(42% 0.12 24 / 0.12);
     --accent-hover: oklch(34% 0.13 24);
+    --link-color: oklch(34% 0.13 24);
   }
 
   [data-theme="pixyll"] {
@@ -321,6 +326,7 @@
     --accent: oklch(46% 0.16 15);
     --accent-soft: oklch(46% 0.16 15 / 0.12);
     --accent-hover: oklch(38% 0.17 15);
+    --link-color: oklch(38% 0.17 15);
   }
 
   [data-theme="whitey"] {
@@ -340,6 +346,7 @@
     --accent: oklch(48% 0.13 215);
     --accent-soft: oklch(48% 0.13 215 / 0.12);
     --accent-hover: oklch(41% 0.14 215);
+    --link-color: oklch(41% 0.14 215);
   }
 
   [data-theme="sepia"] {
@@ -359,6 +366,7 @@
     --accent: #8f4e22;
     --accent-soft: rgba(143, 78, 34, 0.13);
     --accent-hover: #6f3d18;
+    --link-color: #6f3d18;
   }
 
   [data-theme="solarized-light"] {
@@ -378,6 +386,7 @@
     --accent: #268bd2;
     --accent-soft: rgba(38, 139, 210, 0.14);
     --accent-hover: #006cae;
+    --link-color: #006cae;
   }
 
   [data-theme="solarized-dark"] {
@@ -397,6 +406,7 @@
     --accent: #268bd2;
     --accent-soft: rgba(38, 139, 210, 0.18);
     --accent-hover: #2aa198;
+    --link-color: #2aa198;
   }
 
   [data-theme="nord"] {
@@ -416,6 +426,7 @@
     --accent: #88c0d0;
     --accent-soft: rgba(136, 192, 208, 0.16);
     --accent-hover: #8fbcbb;
+    --link-color: #8fbcbb;
   }
 
   [data-theme="catppuccin-latte"] {
@@ -435,6 +446,7 @@
     --accent: #1e66f5;
     --accent-soft: rgba(30, 102, 245, 0.13);
     --accent-hover: #04a5e5;
+    --link-color: #04a5e5;
   }
 
   [data-theme="catppuccin-mocha"] {
@@ -454,6 +466,7 @@
     --accent: #89b4fa;
     --accent-soft: rgba(137, 180, 250, 0.16);
     --accent-hover: #94e2d5;
+    --link-color: #94e2d5;
   }
 
   [data-theme="academic"] {
@@ -473,6 +486,7 @@
     --accent: #315f8c;
     --accent-soft: rgba(49, 95, 140, 0.13);
     --accent-hover: #244866;
+    --link-color: #244866;
   }
 
   [data-theme="minimal"] {
@@ -492,6 +506,7 @@
     --accent: #4b6f77;
     --accent-soft: rgba(75, 111, 119, 0.12);
     --accent-hover: #36565f;
+    --link-color: #36565f;
   }
 
   * {
@@ -722,7 +737,7 @@
   }
 
   .markdown-source-token-link {
-    color: var(--accent-hover);
+    color: var(--link-color);
   }
 
   .markdown-source-token-emphasis {
@@ -747,6 +762,7 @@
     --editor-code-line-bg: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-code));
     --editor-code-text: var(--text-primary);
     --editor-code-control-bg: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+    --editor-link-color: var(--link-color);
     --editor-hl-keyword: oklch(43% 0.17 283);
     --editor-hl-string: oklch(42% 0.13 151);
     --editor-hl-number: oklch(47% 0.16 42);
@@ -769,6 +785,7 @@
   .markdown-paper[data-editor-theme="dark"] {
     --editor-inline-code-text: oklch(78% 0.09 225);
     --editor-code-control-bg: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    --editor-link-color: #b7c5ff;
     --editor-hl-keyword: oklch(78% 0.11 285);
     --editor-hl-string: oklch(76% 0.1 151);
     --editor-hl-number: oklch(76% 0.12 70);
@@ -793,6 +810,7 @@
     --editor-code-control-bg: oklch(23% 0.024 250 / 0.96);
     --editor-inline-code-bg: oklch(24% 0.025 250);
     --editor-inline-code-text: oklch(76% 0.1 205);
+    --editor-link-color: #b7c5ff;
     --editor-hl-keyword: oklch(76% 0.12 285);
     --editor-hl-string: oklch(78% 0.11 151);
     --editor-hl-number: oklch(78% 0.12 70);
@@ -850,6 +868,7 @@
     --editor-inline-code-text: #6f3d18;
     --editor-code-bg: #f5e6c8;
     --editor-code-line-bg: #ead6aa;
+    --editor-link-color: #6f3d18;
     --editor-hl-keyword: #8f4e22;
     --editor-hl-string: #587a37;
     --editor-hl-number: #9b5e23;
@@ -868,6 +887,7 @@
     --editor-inline-code-text: #268bd2;
     --editor-code-bg: #eee8d5;
     --editor-code-line-bg: #e1d8bd;
+    --editor-link-color: #006cae;
     --editor-hl-keyword: #859900;
     --editor-hl-string: #2aa198;
     --editor-hl-number: #d33682;
@@ -891,6 +911,7 @@
     --editor-code-bg: #073642;
     --editor-code-line-bg: #002b36;
     --editor-code-text: #93a1a1;
+    --editor-link-color: #2aa198;
     --editor-hl-keyword: #859900;
     --editor-hl-string: #2aa198;
     --editor-hl-number: #d33682;
@@ -914,6 +935,7 @@
     --editor-code-bg: #242933;
     --editor-code-line-bg: #2e3440;
     --editor-code-text: #d8dee9;
+    --editor-link-color: #8fbcbb;
     --editor-hl-keyword: #81a1c1;
     --editor-hl-string: #a3be8c;
     --editor-hl-number: #b48ead;
@@ -936,6 +958,7 @@
     --editor-inline-code-text: #1e66f5;
     --editor-code-bg: #e6e9ef;
     --editor-code-line-bg: #dce0e8;
+    --editor-link-color: #04a5e5;
     --editor-hl-keyword: #8839ef;
     --editor-hl-string: #40a02b;
     --editor-hl-number: #fe640b;
@@ -959,6 +982,7 @@
     --editor-code-bg: #181825;
     --editor-code-line-bg: #1e1e2e;
     --editor-code-text: #cdd6f4;
+    --editor-link-color: #94e2d5;
     --editor-hl-keyword: #cba6f7;
     --editor-hl-string: #a6e3a1;
     --editor-hl-number: #fab387;
@@ -981,6 +1005,7 @@
     --editor-inline-code-text: #315f8c;
     --editor-code-bg: #eeeae0;
     --editor-code-line-bg: #e5dfd1;
+    --editor-link-color: #244866;
     --editor-hl-keyword: #884a2d;
     --editor-hl-string: #4d7238;
     --editor-hl-number: #8a5a2b;
@@ -999,6 +1024,7 @@
     --editor-inline-code-text: #4b6f77;
     --editor-code-bg: #f3f3f1;
     --editor-code-line-bg: #ededeb;
+    --editor-link-color: #36565f;
     --editor-hl-keyword: #5a6070;
     --editor-hl-string: #55705a;
     --editor-hl-number: #775b42;
@@ -1019,6 +1045,7 @@
     --editor-code-line-bg: #eff2f5;
     --editor-code-text: #1f2328;
     --editor-code-control-bg: rgba(255, 255, 255, 0.92);
+    --editor-link-color: #0550ae;
     --editor-hl-keyword: #cf222e;
     --editor-hl-string: #0a3069;
     --editor-hl-number: #0550ae;
@@ -1040,6 +1067,7 @@
     --editor-inline-code-bg: oklch(91% 0.022 78);
     --editor-code-bg: oklch(90% 0.018 78);
     --editor-code-line-bg: oklch(86% 0.022 78);
+    --editor-link-color: oklch(36% 0.14 31);
     --editor-hl-keyword: oklch(38% 0.13 31);
     --editor-hl-string: oklch(37% 0.09 139);
     --editor-hl-title: oklch(36% 0.11 250);
@@ -1056,6 +1084,7 @@
     --editor-inline-code-bg: oklch(89% 0.024 86);
     --editor-code-bg: oklch(88% 0.02 86);
     --editor-code-line-bg: oklch(83% 0.026 86);
+    --editor-link-color: oklch(34% 0.13 24);
     --editor-hl-keyword: oklch(35% 0.12 24);
     --editor-hl-string: oklch(36% 0.09 145);
     --editor-hl-title: oklch(34% 0.1 248);
@@ -1073,6 +1102,7 @@
     --editor-inline-code-bg: oklch(94% 0.022 94);
     --editor-code-bg: oklch(94.5% 0.017 94);
     --editor-code-line-bg: oklch(90% 0.021 94);
+    --editor-link-color: oklch(38% 0.17 15);
     --editor-hl-keyword: oklch(46% 0.16 15);
     --editor-hl-string: oklch(44% 0.12 157);
     --editor-hl-title: oklch(43% 0.15 236);
@@ -1089,6 +1119,7 @@
     --editor-inline-code-bg: oklch(96% 0.008 106);
     --editor-code-bg: oklch(97% 0.006 106);
     --editor-code-line-bg: oklch(94.5% 0.008 106);
+    --editor-link-color: oklch(41% 0.14 215);
   }
 
   .markdown-paper[data-editor-theme="newsprint"] .ProseMirror::selection,
@@ -1558,13 +1589,13 @@
   }
 
   .markdown-paper a {
-    @apply cursor-text text-(--accent-hover) underline underline-offset-2;
+    @apply cursor-text text-(--editor-link-color) underline underline-offset-2;
     -webkit-user-drag: none;
     user-select: text;
   }
 
   .markdown-paper .markra-live-link-label {
-    @apply cursor-text text-(--accent-hover) underline underline-offset-2;
+    @apply cursor-text text-(--editor-link-color) underline underline-offset-2;
     -webkit-user-drag: none;
     user-select: text;
   }
@@ -1575,7 +1606,7 @@
   }
 
   .markdown-paper .markra-live-link-source-label {
-    @apply cursor-text text-(--accent-hover) underline underline-offset-2;
+    @apply cursor-text text-(--editor-link-color) underline underline-offset-2;
   }
 
   .markdown-paper a[href]::after,
@@ -1585,7 +1616,7 @@
   }
 
   .markdown-paper .markra-live-link-icon {
-    @apply inline-block text-(--accent-hover);
+    @apply inline-block text-(--editor-link-color);
     margin-left: 0.18em;
     pointer-events: none;
     text-decoration: none;

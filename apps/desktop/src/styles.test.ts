@@ -258,6 +258,11 @@ describe("editor stylesheet", () => {
   it("keeps editor links selectable without generated drag artifacts", () => {
     const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
 
+    expect(styles).toContain("--link-color: #2f56c6;");
+    expect(styles).toContain("--link-color: #b7c5ff;");
+    expect(styles).toContain("--editor-link-color: var(--link-color);");
+    expect(styles).toContain(".markdown-source-token-link");
+    expect(styles).toContain("color: var(--link-color);");
     expect(styles).toContain(".markdown-paper a[href]::after");
     expect(styles).toContain(".markdown-paper .markra-live-link-label::after");
     expect(styles).toContain("content: none !important");
@@ -266,7 +271,7 @@ describe("editor stylesheet", () => {
     expect(styles).toContain(".markdown-paper .markra-live-link-icon + .markra-live-link-icon");
     expect(styles).toContain("-webkit-user-drag: none");
     expect(styles).toContain("user-select: text");
-    expect(styles).toContain("@apply cursor-text text-(--accent-hover) underline underline-offset-2");
+    expect(styles).toContain("@apply cursor-text text-(--editor-link-color) underline underline-offset-2");
     expect(styles).toContain(".markdown-paper .ProseMirror.markra-link-open-modifier-active a");
     expect(styles).toContain(".markdown-paper .ProseMirror.markra-link-open-modifier-active .markra-live-link-label");
     expect(styles).toContain("cursor: pointer");
