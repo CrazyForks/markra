@@ -100,6 +100,25 @@ async function settleSortableDrag() {
   });
 }
 
+function mockScrollMetrics(
+  element: Element,
+  metrics: { clientHeight: number; scrollHeight: number; scrollTop: number }
+) {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: metrics.clientHeight
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: metrics.scrollHeight
+  });
+  Object.defineProperty(element, "scrollTop", {
+    configurable: true,
+    value: metrics.scrollTop,
+    writable: true
+  });
+}
+
 function mockTitlebarActionRects(actionIds: string[]) {
   actionIds.forEach((id, index) => {
     const element = document.querySelector(`[data-titlebar-action="${id}"]`) as HTMLElement;
@@ -159,9 +178,11 @@ describe("Markra workspace", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -197,8 +218,10 @@ describe("Markra workspace", () => {
         restoreWorkspaceOnStartup: true,
         suggestAiPanelForComplexInlinePrompts: true,
         showDocumentTabs: true,
+        splitVisualPanePercent: 50,
         titlebarActions: [
           { id: "sourceMode", visible: true },
+          { id: "splitMode", visible: true },
           { id: "open", visible: true },
           { id: "save", visible: true },
           { id: "aiAgent", visible: true },
@@ -223,8 +246,10 @@ describe("Markra workspace", () => {
         restoreWorkspaceOnStartup: true,
         suggestAiPanelForComplexInlinePrompts: true,
         showDocumentTabs: true,
+        splitVisualPanePercent: 50,
         titlebarActions: [
           { id: "sourceMode", visible: true },
+          { id: "splitMode", visible: true },
           { id: "open", visible: true },
           { id: "save", visible: true },
           { id: "aiAgent", visible: true },
@@ -512,9 +537,11 @@ describe("Markra workspace", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent" as const, visible: true },
         { id: "sourceMode" as const, visible: true },
+        { id: "splitMode" as const, visible: true },
         { id: "open" as const, visible: true },
         { id: "save" as const, visible: true },
         { id: "theme" as const, visible: true }
@@ -532,6 +559,7 @@ describe("Markra workspace", () => {
     expect(within(toolbarGroup).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
       "Toggle Markra AI",
       "Switch to source mode",
+      "Switch to split mode",
       "Open Markdown or Folder",
       "Save Markdown",
       "Switch to dark theme",
@@ -543,6 +571,7 @@ describe("Markra workspace", () => {
         ...initialPreferences,
         titlebarActions: [
           { id: "sourceMode", visible: true },
+          { id: "splitMode", visible: true },
           { id: "open", visible: true },
           { id: "save", visible: true },
           { id: "aiAgent", visible: true },
@@ -553,6 +582,7 @@ describe("Markra workspace", () => {
 
     expect(within(toolbarGroup).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
       "Switch to source mode",
+      "Switch to split mode",
       "Open Markdown or Folder",
       "Save Markdown",
       "Toggle Markra AI",
@@ -615,9 +645,11 @@ describe("Markra workspace", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: true,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -1571,9 +1603,11 @@ describe("Markra workspace", () => {
       restoreWorkspaceOnStartup: true,
       suggestAiPanelForComplexInlinePrompts: true,
       showDocumentTabs: false,
+      splitVisualPanePercent: 50,
       titlebarActions: [
         { id: "aiAgent", visible: true },
         { id: "sourceMode", visible: true },
+        { id: "splitMode", visible: true },
         { id: "open", visible: true },
         { id: "save", visible: true },
         { id: "theme", visible: true }
@@ -2079,6 +2113,129 @@ describe("Markra workspace", () => {
     expect(await screen.findByText("Source edit")).toBeInTheDocument();
     expect(screen.getByText("Updated from source mode.")).toBeInTheDocument();
     expect(screen.getByLabelText("Markdown editor")).toHaveAttribute("data-editor-engine", "milkdown");
+  });
+
+  it("keeps source and visual editors synchronized in split mode", async () => {
+    const { container } = renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
+
+    const sourceEditor = await screen.findByRole("textbox", { name: "Markdown source" });
+    const visualEditor = container.querySelector('[data-editor-engine="milkdown"]');
+    expect(visualEditor).toBeInTheDocument();
+    expect(container.querySelector(".editor-split-surface")).toBeInTheDocument();
+
+    fireEvent.change(sourceEditor, {
+      target: {
+        value: "# Split source edit\n\nUpdated from the source pane."
+      }
+    });
+
+    await waitFor(() => {
+      const currentVisualEditor = container.querySelector('[data-editor-engine="milkdown"]') as HTMLElement | null;
+      expect(currentVisualEditor).toBeInTheDocument();
+      expect(within(currentVisualEditor as HTMLElement).getByText("Split source edit")).toBeInTheDocument();
+      expect(within(currentVisualEditor as HTMLElement).getByText("Updated from the source pane.")).toBeInTheDocument();
+    });
+
+    await waitFor(() => expect(mockedInstallNativeApplicationMenu).toHaveBeenCalledTimes(1));
+    const menuHandlers = mockedInstallNativeApplicationMenu.mock.calls[0]?.[0] as Record<string, () => unknown>;
+
+    await act(async () => {
+      menuHandlers.insertTable?.();
+    });
+
+    await waitFor(() => {
+      const currentSourceEditor = screen.getByRole("textbox", { name: "Markdown source" }) as HTMLTextAreaElement;
+      expect(currentSourceEditor.value).toContain("Column 1");
+      expect(currentSourceEditor.value).toContain("Column 2");
+    });
+  });
+
+  it("places the visual pane before the source pane in split mode", async () => {
+    const { container } = renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
+
+    const splitSurface = container.querySelector(".editor-split-surface");
+    expect(splitSurface).toBeInTheDocument();
+
+    const [visualPane, , sourcePane] = Array.from(splitSurface!.children) as HTMLElement[];
+    expect(within(visualPane!).getByLabelText("Markdown editor")).toHaveAttribute("data-editor-engine", "milkdown");
+    expect(within(sourcePane!).getByRole("textbox", { name: "Markdown source" })).toBeInTheDocument();
+  });
+
+  it("resizes split panes from the center divider and persists the ratio", async () => {
+    const { container } = renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
+
+    const splitSurface = container.querySelector<HTMLElement>(".editor-split-surface");
+    expect(splitSurface).toBeInTheDocument();
+    vi.spyOn(splitSurface!, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 100,
+      right: 1100,
+      top: 0,
+      width: 1000,
+      x: 100,
+      y: 0,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    const resizeHandle = await screen.findByRole("separator", { name: "Resize split panes" });
+
+    fireEvent.pointerDown(resizeHandle, { clientX: 600, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 700 });
+    fireEvent.pointerUp(window);
+
+    expect(splitSurface!.style.getPropertyValue("--split-visual-pane")).toBe("60fr");
+    expect(splitSurface!.style.getPropertyValue("--split-source-pane")).toBe("40fr");
+    expect(resizeHandle).toHaveAttribute("aria-valuemin", "25");
+    expect(resizeHandle).toHaveAttribute("aria-valuemax", "75");
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "60");
+    await waitFor(() => expect(mockedSaveStoredEditorPreferences).toHaveBeenCalledWith(expect.objectContaining({
+      splitVisualPanePercent: 60
+    })));
+    await waitFor(() => expect(mockedNotifyAppEditorPreferencesChanged).toHaveBeenCalledWith(expect.objectContaining({
+      splitVisualPanePercent: 60
+    })));
+  });
+
+  it("links source and visual pane scrolling in split mode", async () => {
+    const { container } = renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
+
+    const [visualScroll, sourceScroll] = Array.from(
+      container.querySelectorAll<HTMLElement>(".editor-split-surface .paper-scroll")
+    );
+    expect(sourceScroll).toBeInTheDocument();
+    expect(visualScroll).toBeInTheDocument();
+
+    mockScrollMetrics(sourceScroll!, {
+      clientHeight: 200,
+      scrollHeight: 1000,
+      scrollTop: 200
+    });
+    mockScrollMetrics(visualScroll!, {
+      clientHeight: 300,
+      scrollHeight: 700,
+      scrollTop: 0
+    });
+
+    fireEvent.scroll(sourceScroll!);
+
+    expect(visualScroll!.scrollTop).toBe(100);
   });
 
   it("switches source mode from the keyboard shortcut", async () => {

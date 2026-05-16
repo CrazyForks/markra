@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef } from "react";
+import { type CSSProperties, type Ref, type UIEvent, useCallback, useEffect, useMemo, useRef } from "react";
 import { defaultValueCtx, Editor, editorViewCtx, editorViewOptionsCtx, parserCtx, rootCtx, serializerCtx } from "@milkdown/kit/core";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
@@ -106,12 +106,14 @@ type MarkdownPaperProps = {
   onContentWidthChange?: (width: number) => unknown;
   onContentWidthResizeEnd?: () => unknown;
   onContentWidthResizeStart?: () => unknown;
+  onScroll?: (event: UIEvent<HTMLElement>) => unknown;
   onSaveClipboardImage?: SaveClipboardImage;
   onSaveRemoteClipboardImage?: SaveRemoteClipboardImage;
   openExternalUrl?: (url: string) => unknown;
   onTextSelectionChange?: (selection: AiSelectionContext | null) => unknown;
   resolveImageSrc?: (src: string) => string;
   revision: number;
+  scrollRef?: Ref<HTMLElement>;
   topInset?: "tabs" | "titlebar";
   workspaceFiles?: MarkdownDocumentLinkFile[];
 };
@@ -535,12 +537,14 @@ export function MarkdownPaper({
   onContentWidthChange,
   onContentWidthResizeEnd,
   onContentWidthResizeStart,
+  onScroll,
   onSaveClipboardImage,
   onSaveRemoteClipboardImage,
   openExternalUrl,
   onTextSelectionChange,
   resolveImageSrc,
   revision,
+  scrollRef,
   topInset = "titlebar",
   workspaceFiles
 }: MarkdownPaperProps) {
@@ -562,6 +566,8 @@ export function MarkdownPaper({
     <section
       className="paper-scroll h-full min-h-0 overflow-auto overscroll-none bg-transparent"
       aria-label={t(language, "app.writingSurface")}
+      onScroll={onScroll}
+      ref={scrollRef}
     >
       <article
         key={revision}

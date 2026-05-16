@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type UIEvent as ReactUIEvent
+} from "react";
 import { flushSync } from "react-dom";
 import { AppToaster } from "./components/AppToaster";
 import { AiCommandBar } from "./components/AiCommandBar";
@@ -63,8 +73,11 @@ import {
 } from "@markra/editor";
 import { aiAgentWebSearchAvailable } from "@markra/ai";
 import {
+  defaultSplitVisualPanePercent,
   deleteStoredAiAgentSession,
   initializeStoredAiAgentSession,
+  splitVisualPanePercentMax,
+  splitVisualPanePercentMin,
   saveStoredEditorPreferences,
   saveStoredAiAgentSessionTitle,
   setStoredAiAgentSessionArchived,
@@ -87,6 +100,7 @@ import { clampNumber } from "@markra/shared";
 const aiAgentPanelDefaultWidth = 384;
 const aiAgentPanelMinWidth = 320;
 const aiAgentPanelMaxWidth = 760;
+const splitPaneKeyboardStepPercent = 5;
 const aiResultSignatureSeparator = "\u001f";
 
 type ImageDocumentTab = NativeMarkdownFolderFile & {
@@ -115,6 +129,8 @@ function documentTabAsFolderFile(tab: MarkdownTabsBarItem): NativeMarkdownFolder
   };
 }
 type AiQuickActionIntent = Exclude<AiEditIntent, "custom">;
+type EditorMode = "source" | "split" | "visual";
+type EditorSurface = "source" | "visual";
 
 function isSettingsWindowRoute() {
   return new URLSearchParams(window.location.search).has("settings");
@@ -172,15 +188,27 @@ export default function App() {
   const [aiCommandOverlayInset, setAiCommandOverlayInset] = useState(0);
   const [aiSelectionToolbarAnchor, setAiSelectionToolbarAnchor] = useState<SelectionAnchor | null>(null);
   const [aiContextMenuActionPending, setAiContextMenuActionPending] = useState(false);
-  const [editorMode, setEditorMode] = useState<"source" | "visual">("visual");
+  const [editorMode, setEditorMode] = useState<EditorMode>("visual");
+  const [activeEditorSurface, setActiveEditorSurface] = useState<EditorSurface>("visual");
+  const [splitVisualPanePercent, setSplitVisualPanePercent] = useState(defaultSplitVisualPanePercent);
+  const [visualEditorReadySequence, setVisualEditorReadySequence] = useState(0);
   const [exportSnapshot, setExportSnapshot] = useState<MarkdownExportSnapshot | null>(null);
   const sourceMode = editorMode === "source";
+  const splitMode = editorMode === "split";
+  const sourceSurfaceActive = sourceMode || (splitMode && activeEditorSurface === "source");
   const aiResultsRef = useRef<AiDiffResult[]>([]);
   const appliedAiPreviewKeysRef = useRef(new Set<string>());
   const activeAiSelectionRef = useRef<AiSelectionContext | null>(null);
   const aiContextMenuActionIdRef = useRef(0);
   const exportRequestIdRef = useRef(0);
   const pendingEditorContentWidthPxRef = useRef<number | null>(null);
+  const pendingSplitVisualPanePercentRef = useRef(defaultSplitVisualPanePercent);
+  const sourceToVisualSyncingRef = useRef(false);
+  const sourceScrollRef = useRef<HTMLElement | null>(null);
+  const visualScrollRef = useRef<HTMLElement | null>(null);
+  const splitSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const splitScrollSyncTargetRef = useRef<EditorSurface | null>(null);
+  const splitPaneResizeCleanupRef = useRef<(() => unknown) | null>(null);
   const exportContextRef = useRef({
     activeImageFile: false,
     content: "",
@@ -190,6 +218,30 @@ export default function App() {
   const reconciledAiWorkspaceKeyRef = useRef<string | null | undefined>(undefined);
   const translate = useCallback((key: I18nKey) => t(appLanguage.language, key), [appLanguage.language]);
   const editor = useEditorController();
+  const getEditorCurrentMarkdown = editor.getCurrentMarkdown;
+  const handleMilkdownEditorReady = editor.handleEditorReady;
+  const insertEditorMarkdownSnippet = editor.insertMarkdownSnippet;
+  const insertEditorMarkdownTable = editor.insertMarkdownTable;
+  const isEditorCurrentMarkdownEquivalent = editor.isCurrentMarkdownEquivalent;
+  const replaceEditorMarkdown = editor.replaceMarkdown;
+  const runEditorShortcut = editor.runEditorShortcut;
+  const readCurrentMarkdownForDocument = useCallback((fallbackContent: string) => {
+    if (sourceSurfaceActive) return fallbackContent;
+
+    return getEditorCurrentMarkdown(fallbackContent);
+  }, [getEditorCurrentMarkdown, sourceSurfaceActive]);
+  const isCurrentMarkdownEquivalentForDocument = useCallback((markdown: string) => {
+    if (sourceSurfaceActive) return undefined;
+
+    return isEditorCurrentMarkdownEquivalent(markdown);
+  }, [isEditorCurrentMarkdownEquivalent, sourceSurfaceActive]);
+  const handleVisualEditorReady = useCallback((...args: Parameters<typeof handleMilkdownEditorReady>) => {
+    const [readyEditor] = args;
+    handleMilkdownEditorReady(...args);
+    if (readyEditor) {
+      setVisualEditorReadySequence((current) => current + 1);
+    }
+  }, [handleMilkdownEditorReady]);
   useDefaultContextMenuBlocker();
   const fileTree = useMarkdownFileTree({
     onWorkspaceSessionChange: setAiAgentSessionId
@@ -227,8 +279,8 @@ export default function App() {
   const markdownDocument = useMarkdownDocument({
     confirmDiscardUnsavedChanges,
     documentTabsEnabled: editorPreferences.preferences.showDocumentTabs,
-    getCurrentMarkdown: editor.getCurrentMarkdown,
-    isCurrentMarkdownEquivalent: editor.isCurrentMarkdownEquivalent,
+    getCurrentMarkdown: readCurrentMarkdownForDocument,
+    isCurrentMarkdownEquivalent: isCurrentMarkdownEquivalentForDocument,
     onMarkdownTreeChange: refreshMarkdownFileTree,
     onTreeRootFromFolderPath: openFolderPath,
     onTreeRootFromFilePath: setRootFromMarkdownFilePath,
@@ -265,6 +317,12 @@ export default function App() {
   const aiResult = aiResults.at(-1) ?? null;
   const activeEditorContentWidth = editorContentWidth;
   const activeEditorContentWidthPx = editorContentWidthPx ?? editorPreferences.preferences.contentWidthPx ?? null;
+  const resolvedSplitVisualPanePercent =
+    clampNumber(splitVisualPanePercent, splitVisualPanePercentMin, splitVisualPanePercentMax) ?? defaultSplitVisualPanePercent;
+  const splitSurfaceStyle = useMemo(() => ({
+    "--split-visual-pane": `${resolvedSplitVisualPanePercent}fr`,
+    "--split-source-pane": `${100 - resolvedSplitVisualPanePercent}fr`
+  } as CSSProperties), [resolvedSplitVisualPanePercent]);
   const resolveImageSrc = useMemo(() => createMarkdownImageSrcResolver(document.path), [document.path]);
   const resolveExportImageSrc = useMemo(
     () => createMarkdownImageSrcResolver(document.path, { convertFileSrc: localFileUrlFromPath }),
@@ -276,8 +334,8 @@ export default function App() {
     return createMarkdownImageSrcResolver(activeImageFile.path)(activeImageFile.path);
   }, [activeImageFile]);
   const getAiDocumentContent = useCallback(
-    () => (document.open ? editor.getCurrentMarkdown(document.content) : document.content),
-    [document.content, document.open, editor]
+    () => (document.open ? readCurrentMarkdownForDocument(document.content) : document.content),
+    [document.content, document.open, readCurrentMarkdownForDocument]
   );
   const readAiWorkspaceFile = useCallback(async (path: string) => {
     const file = await readNativeMarkdownFile(path);
@@ -312,7 +370,7 @@ export default function App() {
     setAiResults(results);
   }, []);
   const getPendingAiResult = useCallback(() => aiResultsRef.current.at(-1) ?? null, []);
-  const hasAiCommandContext = !sourceMode && Boolean(activeAiSelection?.text.trim());
+  const hasAiCommandContext = !sourceSurfaceActive && Boolean(activeAiSelection?.text.trim());
   const selectedInlineAiModel =
     aiSettings.availableTextModels.find(
       (model) => model.providerId === aiSettings.inlineProvider?.id && model.id === aiSettings.inlineModelId
@@ -615,6 +673,8 @@ export default function App() {
   const aiContextMenuActionRef = useRef<((intent: AiQuickActionIntent, prompt: string) => unknown) | null>(null);
   useEffect(() => {
     aiContextMenuActionRef.current = (intent: AiQuickActionIntent, prompt: string) => {
+      if (sourceSurfaceActive) return;
+
       const selection = explicitAiTextSelection(getActiveAiSelection()) ?? explicitAiTextSelection(getEditorSelection());
       if (!selection) return;
 
@@ -651,6 +711,7 @@ export default function App() {
     getActiveAiSelection,
     holdAiSelection,
     openAiCommand,
+    sourceSurfaceActive,
     submitAiCommandPrompt,
     updateActiveAiSelection,
     updateAiCommandPrompt
@@ -659,10 +720,12 @@ export default function App() {
     return aiContextMenuActionRef.current?.(intent, prompt);
   }, []);
   const getAiContextMenuAvailable = useCallback(() => {
+    if (sourceSurfaceActive) return false;
+
     const selection = explicitAiTextSelection(getActiveAiSelection()) ?? explicitAiTextSelection(getEditorSelection());
 
     return Boolean(selection);
-  }, [getActiveAiSelection, getEditorSelection]);
+  }, [getActiveAiSelection, getEditorSelection, sourceSurfaceActive]);
   const handleAiCommandToggle = useCallback(() => {
     setAiSelectionToolbarAnchor(null);
 
@@ -670,6 +733,8 @@ export default function App() {
       handleAiCommandClose();
       return;
     }
+
+    if (sourceSurfaceActive) return;
 
     const selection = aiCommandTextSelection(getActiveAiSelection()) ?? aiCommandTextSelection(getEditorSelection());
     if (!selection) return;
@@ -683,6 +748,7 @@ export default function App() {
     handleAiCommandClose,
     holdAiSelection,
     openAiCommand,
+    sourceSurfaceActive,
     updateActiveAiSelection
   ]);
   const handleAiCommandSelectionContextFocus = useCallback(() => {
@@ -699,7 +765,7 @@ export default function App() {
     interruptAiCommandPrompt();
   }, [interruptAiCommandPrompt]);
   const aiSelectionToolbarVisible =
-    !sourceMode &&
+    !sourceSurfaceActive &&
     Boolean(aiSelectionToolbarAnchor) &&
     activeAiSelection?.source === "selection" &&
     Boolean(activeAiSelection.text.trim()) &&
@@ -842,6 +908,18 @@ export default function App() {
     pendingEditorContentWidthPxRef.current = storedWidth;
   }, [editorPreferences.preferences.contentWidth, editorPreferences.preferences.contentWidthPx]);
 
+  useEffect(() => {
+    setSplitVisualPanePercent(editorPreferences.preferences.splitVisualPanePercent);
+    pendingSplitVisualPanePercentRef.current = editorPreferences.preferences.splitVisualPanePercent;
+  }, [editorPreferences.preferences.splitVisualPanePercent]);
+
+  useEffect(() => {
+    return () => {
+      splitPaneResizeCleanupRef.current?.();
+      splitPaneResizeCleanupRef.current = null;
+    };
+  }, []);
+
   const handleEditorContentWidthChange = useCallback((width: number) => {
     pendingEditorContentWidthPxRef.current = width;
     setEditorContentWidthPx(width);
@@ -861,6 +939,109 @@ export default function App() {
       .then(() => notifyAppEditorPreferencesChanged(nextPreferences))
       .catch(() => {});
   }, [activeEditorContentWidth, editorPreferences.preferences]);
+  const resizeSplitVisualPane = useCallback((nextPercent: number | null) => {
+    if (nextPercent === null) return;
+
+    const roundedPercent = Math.round(nextPercent);
+    pendingSplitVisualPanePercentRef.current = roundedPercent;
+    setSplitVisualPanePercent(roundedPercent);
+  }, []);
+  const handleSplitPaneResizeEnd = useCallback(() => {
+    const nextPercent = pendingSplitVisualPanePercentRef.current;
+    if (nextPercent === editorPreferences.preferences.splitVisualPanePercent) return;
+
+    const nextPreferences = {
+      ...editorPreferences.preferences,
+      splitVisualPanePercent: nextPercent
+    };
+
+    saveStoredEditorPreferences(nextPreferences)
+      .then(() => notifyAppEditorPreferencesChanged(nextPreferences))
+      .catch(() => {});
+  }, [editorPreferences.preferences]);
+  const handleSplitPaneResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const splitSurface = splitSurfaceRef.current;
+    if (!splitSurface) return;
+
+    const surfaceRect = splitSurface.getBoundingClientRect();
+    if (surfaceRect.width <= 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const startX = event.clientX;
+    const startPercent = pendingSplitVisualPanePercentRef.current;
+    const previousCursor = window.document.body.style.cursor;
+    const previousUserSelect = window.document.body.style.userSelect;
+
+    window.document.body.style.cursor = "col-resize";
+    window.document.body.style.userSelect = "none";
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      resizeSplitVisualPane(clampNumber(
+        startPercent + ((moveEvent.clientX - startX) / surfaceRect.width) * 100,
+        splitVisualPanePercentMin,
+        splitVisualPanePercentMax
+      ));
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      window.document.body.style.cursor = previousCursor;
+      window.document.body.style.userSelect = previousUserSelect;
+      splitPaneResizeCleanupRef.current = null;
+      handleSplitPaneResizeEnd();
+    };
+
+    const handlePointerUp = () => {
+      cleanup();
+    };
+
+    splitPaneResizeCleanupRef.current?.();
+    splitPaneResizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+  }, [handleSplitPaneResizeEnd, resizeSplitVisualPane]);
+  const handleSplitPaneResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      resizeSplitVisualPane(clampNumber(
+        splitVisualPanePercent - splitPaneKeyboardStepPercent,
+        splitVisualPanePercentMin,
+        splitVisualPanePercentMax
+      ));
+      handleSplitPaneResizeEnd();
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      resizeSplitVisualPane(clampNumber(
+        splitVisualPanePercent + splitPaneKeyboardStepPercent,
+        splitVisualPanePercentMin,
+        splitVisualPanePercentMax
+      ));
+      handleSplitPaneResizeEnd();
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      resizeSplitVisualPane(splitVisualPanePercentMin);
+      handleSplitPaneResizeEnd();
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      resizeSplitVisualPane(splitVisualPanePercentMax);
+      handleSplitPaneResizeEnd();
+    }
+  }, [handleSplitPaneResizeEnd, resizeSplitVisualPane, splitVisualPanePercent]);
   const handleTitlebarActionsChange = useCallback((titlebarActions: TitlebarActionPreference[]) => {
     const nextPreferences = {
       ...editorPreferences.preferences,
@@ -1018,6 +1199,77 @@ export default function App() {
   const titleDocumentKind = activeImageFile ? "image" : hasOpenDocument ? "file" : "folder";
   const sourceModeAvailable = hasOpenDocument && !activeImageFile;
   const supportsAiThinking = selectedInlineAiModel?.capabilities.includes("reasoning") ?? false;
+  const handleVisualPaneFocus = useCallback(() => {
+    setActiveEditorSurface("visual");
+  }, []);
+  const handleSourcePaneFocus = useCallback(() => {
+    setActiveEditorSurface("source");
+    updateActiveAiSelection(null);
+  }, [updateActiveAiSelection]);
+  const handleVisualMarkdownChange = useCallback((content: string) => {
+    if (sourceToVisualSyncingRef.current) return;
+
+    if (splitMode) setActiveEditorSurface("visual");
+    handleMarkdownChange(content);
+  }, [handleMarkdownChange, splitMode]);
+  const handleSourceMarkdownChange = useCallback((content: string) => {
+    if (splitMode) setActiveEditorSurface("source");
+    handleMarkdownChange(content);
+  }, [handleMarkdownChange, splitMode]);
+  const syncSplitPaneScroll = useCallback((sourceSurface: EditorSurface, event: ReactUIEvent<HTMLElement>) => {
+    if (!splitMode) return;
+
+    if (splitScrollSyncTargetRef.current === sourceSurface) {
+      splitScrollSyncTargetRef.current = null;
+      return;
+    }
+
+    const sourceElement = event.currentTarget;
+    const targetSurface: EditorSurface = sourceSurface === "source" ? "visual" : "source";
+    const targetElement = targetSurface === "visual" ? visualScrollRef.current : sourceScrollRef.current;
+    if (!targetElement) return;
+
+    const sourceMaxScrollTop = Math.max(0, sourceElement.scrollHeight - sourceElement.clientHeight);
+    const targetMaxScrollTop = Math.max(0, targetElement.scrollHeight - targetElement.clientHeight);
+    if (targetMaxScrollTop <= 0) return;
+
+    const nextScrollTop =
+      sourceMaxScrollTop <= 0
+        ? 0
+        : Math.round((sourceElement.scrollTop / sourceMaxScrollTop) * targetMaxScrollTop);
+    if (Math.abs(targetElement.scrollTop - nextScrollTop) < 1) return;
+
+    splitScrollSyncTargetRef.current = targetSurface;
+    targetElement.scrollTop = nextScrollTop;
+    window.setTimeout(() => {
+      if (splitScrollSyncTargetRef.current === targetSurface) {
+        splitScrollSyncTargetRef.current = null;
+      }
+    }, 0);
+  }, [splitMode]);
+  const handleSourcePaneScroll = useCallback((event: ReactUIEvent<HTMLElement>) => {
+    syncSplitPaneScroll("source", event);
+  }, [syncSplitPaneScroll]);
+  const handleVisualPaneScroll = useCallback((event: ReactUIEvent<HTMLElement>) => {
+    syncSplitPaneScroll("visual", event);
+  }, [syncSplitPaneScroll]);
+  const syncVisualMarkdownAfterEditorCommand = useCallback(() => {
+    if (!splitMode) return;
+
+    handleVisualMarkdownChange(getEditorCurrentMarkdown(document.content));
+  }, [document.content, getEditorCurrentMarkdown, handleVisualMarkdownChange, splitMode]);
+  const handleInsertMarkdownSnippet = useCallback((...args: Parameters<typeof insertEditorMarkdownSnippet>) => {
+    insertEditorMarkdownSnippet(...args);
+    syncVisualMarkdownAfterEditorCommand();
+  }, [insertEditorMarkdownSnippet, syncVisualMarkdownAfterEditorCommand]);
+  const handleInsertMarkdownTable = useCallback(() => {
+    insertEditorMarkdownTable();
+    syncVisualMarkdownAfterEditorCommand();
+  }, [insertEditorMarkdownTable, syncVisualMarkdownAfterEditorCommand]);
+  const handleRunEditorShortcut = useCallback((...args: Parameters<typeof runEditorShortcut>) => {
+    runEditorShortcut(...args);
+    syncVisualMarkdownAfterEditorCommand();
+  }, [runEditorShortcut, syncVisualMarkdownAfterEditorCommand]);
   useEffect(() => {
     exportContextRef.current = {
       activeImageFile: Boolean(activeImageFile),
@@ -1031,16 +1283,38 @@ export default function App() {
 
     if (sourceMode) {
       setEditorMode("visual");
+      setActiveEditorSurface("visual");
       return;
     }
 
     updateActiveAiSelection(null);
     handleAiCommandClose();
     setEditorMode("source");
+    setActiveEditorSurface("source");
   }, [
     handleAiCommandClose,
     sourceMode,
     sourceModeAvailable,
+    updateActiveAiSelection
+  ]);
+  const handleEditorSplitToggle = useCallback(() => {
+    if (!sourceModeAvailable) return;
+
+    if (splitMode) {
+      setEditorMode("visual");
+      setActiveEditorSurface("visual");
+      return;
+    }
+
+    updateActiveAiSelection(null);
+    handleAiCommandClose();
+    setEditorMode("split");
+    setActiveEditorSurface(sourceMode ? "source" : "visual");
+  }, [
+    handleAiCommandClose,
+    sourceMode,
+    sourceModeAvailable,
+    splitMode,
     updateActiveAiSelection
   ]);
   const handleOpenMarkdownFolder = useCallback(async () => {
@@ -1058,7 +1332,6 @@ export default function App() {
   const clearExportSnapshot = useCallback((id: number) => {
     setExportSnapshot((current) => current?.id === id ? null : current);
   }, []);
-  const getCurrentMarkdown = editor.getCurrentMarkdown;
   const beginDocumentExport = useCallback((kind: MarkdownExportSnapshot["kind"]) => {
     const context = exportContextRef.current;
     if (!context.hasOpenDocument || context.activeImageFile) return;
@@ -1067,10 +1340,10 @@ export default function App() {
     setExportSnapshot({
       id: exportRequestIdRef.current,
       kind,
-      markdown: getCurrentMarkdown(context.content),
+      markdown: readCurrentMarkdownForDocument(context.content),
       title: context.name
     });
-  }, [getCurrentMarkdown]);
+  }, [readCurrentMarkdownForDocument]);
   const handleRenderedExport = useCallback((exported: RenderedMarkdownExport) => {
     if (exportSnapshot?.id !== exported.id) return;
 
@@ -1112,7 +1385,21 @@ export default function App() {
     if (sourceModeAvailable) return;
 
     setEditorMode("visual");
+    setActiveEditorSurface("visual");
   }, [sourceModeAvailable]);
+  useEffect(() => {
+    if (!splitMode || activeEditorSurface !== "source") return;
+
+    sourceToVisualSyncingRef.current = true;
+    replaceEditorMarkdown(document.content);
+    sourceToVisualSyncingRef.current = false;
+  }, [
+    activeEditorSurface,
+    document.content,
+    replaceEditorMarkdown,
+    splitMode,
+    visualEditorReadySequence
+  ]);
   const aiAgentContext = useMemo(() => ({
     documentName: titleDocumentName,
     headingCount: outlineItems.length,
@@ -1139,14 +1426,14 @@ export default function App() {
     closeDocument: handleCloseCurrentFile,
     exportHtml: exportHtmlDocument,
     exportPdf: exportPdfDocument,
-    insertMarkdownSnippet: editor.insertMarkdownSnippet,
-    insertMarkdownTable: editor.insertMarkdownTable,
+    insertMarkdownSnippet: handleInsertMarkdownSnippet,
+    insertMarkdownTable: handleInsertMarkdownTable,
     language: appLanguage.language,
     markdownShortcuts: editorPreferences.preferences.markdownShortcuts,
     openDocument: handleOpenMarkdownFile,
     openFolder: handleOpenMarkdownFolder,
     runAiQuickAction: handleAiContextMenuAction,
-    runEditorShortcut: editor.runEditorShortcut,
+    runEditorShortcut: handleRunEditorShortcut,
     saveDocument: handleSaveClick,
     saveDocumentAs,
     toggleAiAgent: handleAiAgentToggle,
@@ -1343,6 +1630,7 @@ export default function App() {
           markdownFilesWidth={fileTreeWidth}
           quickCreateMarkdownFileVisible={!fileTreeOpen}
           saveDisabled={!hasOpenDocument || Boolean(activeImageFile)}
+          splitMode={splitMode}
           sourceMode={sourceMode}
           sourceModeDisabled={!sourceModeAvailable}
           theme={appTheme.resolvedTheme}
@@ -1355,6 +1643,7 @@ export default function App() {
           onTitlebarActionsChange={handleTitlebarActionsChange}
           onToggleAiAgent={handleAiAgentToggle}
           onToggleMarkdownFiles={handleFileTreeToggle}
+          onToggleSplitMode={handleEditorSplitToggle}
           onToggleSourceMode={handleEditorModeToggle}
           onToggleTheme={appTheme.toggleTheme}
         />
@@ -1400,7 +1689,74 @@ export default function App() {
                 />
               ) : hasOpenDocument ? (
                 <>
-                  {sourceMode ? (
+                  {splitMode ? (
+                    <div
+                      className="editor-split-surface grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y divide-(--border-default) min-[900px]:grid-cols-[minmax(0,var(--split-visual-pane))_8px_minmax(0,var(--split-source-pane))] min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:divide-y-0"
+                      ref={splitSurfaceRef}
+                      style={splitSurfaceStyle}
+                    >
+                      <div className="min-h-0 overflow-hidden" onFocusCapture={handleVisualPaneFocus}>
+                        <MarkdownPaper
+                          autoFocus={activeEditorSurface === "visual"}
+                          bottomOverlayInset={aiCommandVisible && activeEditorSurface === "visual" ? aiCommandOverlayInset : 0}
+                          bodyFontSize={editorPreferences.preferences.bodyFontSize}
+                          contentWidth={activeEditorContentWidth}
+                          contentWidthPx={activeEditorContentWidthPx}
+                          documentPath={document.path}
+                          editorTheme={appTheme.editorTheme}
+                          initialContent={document.content}
+                          language={appLanguage.language}
+                          lineHeight={editorPreferences.preferences.lineHeight}
+                          markdownShortcuts={editorPreferences.preferences.markdownShortcuts}
+                          onEditorReady={handleVisualEditorReady}
+                          onMarkdownChange={handleVisualMarkdownChange}
+                          onContentWidthChange={handleEditorContentWidthChange}
+                          onContentWidthResizeEnd={handleEditorContentWidthResizeEnd}
+                          onSaveClipboardImage={handleSaveClipboardImage}
+                          onSaveRemoteClipboardImage={handleSaveRemoteClipboardImage}
+                          openExternalUrl={handleOpenEditorLink}
+                          onTextSelectionChange={handleTextSelectionChange}
+                          resolveImageSrc={resolveImageSrc}
+                          revision={document.revision}
+                          onScroll={handleVisualPaneScroll}
+                          scrollRef={visualScrollRef}
+                          topInset="titlebar"
+                          workspaceFiles={fileTreeFiles}
+                        />
+                      </div>
+                      <div
+                        className="group/split-resizer relative z-20 hidden cursor-col-resize touch-none outline-none min-[900px]:block"
+                        role="separator"
+                        tabIndex={0}
+                        aria-label={translate("app.resizeSplitPanes")}
+                        aria-orientation="vertical"
+                        aria-valuemin={splitVisualPanePercentMin}
+                        aria-valuemax={splitVisualPanePercentMax}
+                        aria-valuenow={resolvedSplitVisualPanePercent}
+                        onKeyDown={handleSplitPaneResizeKeyDown}
+                        onPointerDown={handleSplitPaneResizePointerDown}
+                      >
+                        <span className="pointer-events-none absolute inset-y-5 left-1/2 w-px -translate-x-1/2 bg-(--border-default) transition-colors duration-150 ease-out group-hover/split-resizer:bg-(--accent) group-focus/split-resizer:bg-(--accent)" />
+                      </div>
+                      <div className="min-h-0 overflow-hidden" onFocusCapture={handleSourcePaneFocus}>
+                        <MarkdownSourceEditor
+                          autoFocus={activeEditorSurface === "source"}
+                          bodyFontSize={editorPreferences.preferences.bodyFontSize}
+                          content={document.content}
+                          contentWidth={activeEditorContentWidth}
+                          contentWidthPx={activeEditorContentWidthPx}
+                          language={appLanguage.language}
+                          lineHeight={editorPreferences.preferences.lineHeight}
+                          onChange={handleSourceMarkdownChange}
+                          onContentWidthChange={handleEditorContentWidthChange}
+                          onContentWidthResizeEnd={handleEditorContentWidthResizeEnd}
+                          onScroll={handleSourcePaneScroll}
+                          scrollRef={sourceScrollRef}
+                          topInset="titlebar"
+                        />
+                      </div>
+                    </div>
+                  ) : sourceMode ? (
                     <MarkdownSourceEditor
                       autoFocus
                       bodyFontSize={editorPreferences.preferences.bodyFontSize}
@@ -1409,7 +1765,7 @@ export default function App() {
                       contentWidthPx={activeEditorContentWidthPx}
                       language={appLanguage.language}
                       lineHeight={editorPreferences.preferences.lineHeight}
-                      onChange={handleMarkdownChange}
+                      onChange={handleSourceMarkdownChange}
                       onContentWidthChange={handleEditorContentWidthChange}
                       onContentWidthResizeEnd={handleEditorContentWidthResizeEnd}
                       topInset="titlebar"
@@ -1427,8 +1783,8 @@ export default function App() {
                       language={appLanguage.language}
                       lineHeight={editorPreferences.preferences.lineHeight}
                       markdownShortcuts={editorPreferences.preferences.markdownShortcuts}
-                      onEditorReady={editor.handleEditorReady}
-                      onMarkdownChange={handleMarkdownChange}
+                      onEditorReady={handleVisualEditorReady}
+                      onMarkdownChange={handleVisualMarkdownChange}
                       onContentWidthChange={handleEditorContentWidthChange}
                       onContentWidthResizeEnd={handleEditorContentWidthResizeEnd}
                       onSaveClipboardImage={handleSaveClipboardImage}
