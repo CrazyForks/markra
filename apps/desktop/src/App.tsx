@@ -1111,10 +1111,11 @@ export default function App() {
     }
   }, [applyRenamedTreeFile, renameMarkdownTreeFile]);
   const handleDeleteMarkdownTreeFile = useCallback(async (file: NativeMarkdownFolderFile) => {
+    const fileIsFolder = file.kind === "folder";
     const confirmed = await confirmNativeMarkdownFileDelete(file.name, {
-      cancelLabel: translate("app.cancelDeleteMarkdownFile"),
-      message: translate("app.confirmDeleteMarkdownFile"),
-      okLabel: translate("app.confirmDeleteMarkdownFileAction")
+      cancelLabel: translate(fileIsFolder ? "app.cancelDeleteMarkdownFolder" : "app.cancelDeleteMarkdownFile"),
+      message: translate(fileIsFolder ? "app.confirmDeleteMarkdownFolder" : "app.confirmDeleteMarkdownFile"),
+      okLabel: translate(fileIsFolder ? "app.confirmDeleteMarkdownFolderAction" : "app.confirmDeleteMarkdownFileAction")
     });
     if (!confirmed) return;
 

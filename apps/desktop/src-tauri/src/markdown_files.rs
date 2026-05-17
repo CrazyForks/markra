@@ -848,6 +848,28 @@ fn canonical_markdown_tree_file(root: &Path, path: &Path) -> Result<PathBuf, Str
     Ok(canonical_path)
 }
 
+fn canonical_markdown_tree_entry(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let canonical_path = path.canonicalize().map_err(|error| error.to_string())?;
+
+    canonical_path
+        .strip_prefix(root)
+        .map_err(|_| "File is outside the current Markdown folder".to_string())?;
+
+    if canonical_path == root {
+        return Err("Cannot delete the current Markdown folder root".to_string());
+    }
+
+    if canonical_path.is_dir()
+        || (canonical_path.is_file()
+            && (is_markdown_tree_file(&canonical_path)
+                || is_markdown_tree_asset_file(&canonical_path)))
+    {
+        return Ok(canonical_path);
+    }
+
+    Err("Path is not a Markdown file, supported image asset, or folder".to_string())
+}
+
 fn ensure_markdown_tree_parent(root: &Path, parent: &Path) -> Result<(), String> {
     let canonical_parent = parent.canonicalize().map_err(|error| error.to_string())?;
     canonical_parent
@@ -1089,9 +1111,13 @@ pub(crate) fn rename_markdown_tree_file(
 pub(crate) fn delete_markdown_tree_file(root_path: String, path: String) -> Result<(), String> {
     let root_path = PathBuf::from(root_path);
     let root = canonical_markdown_tree_root(&root_path)?;
-    let source_path = canonical_markdown_tree_file(&root, &PathBuf::from(path))?;
+    let source_path = canonical_markdown_tree_entry(&root, &PathBuf::from(path))?;
 
-    fs::remove_file(source_path).map_err(|error| error.to_string())
+    if source_path.is_dir() {
+        fs::remove_dir_all(source_path).map_err(|error| error.to_string())
+    } else {
+        fs::remove_file(source_path).map_err(|error| error.to_string())
+    }
 }
 
 #[tauri::command]
@@ -1876,6 +1902,31 @@ mod tests {
             None
         )
         .is_err());
+
+        fs::remove_dir_all(root).expect("test tree should be removed");
+    }
+
+    #[test]
+    fn deletes_markdown_tree_folders_inside_the_root() {
+        let root = std::env::temp_dir().join(format!(
+            "markra-tree-folder-delete-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+
+        let docs = root.join("docs");
+        fs::create_dir_all(&docs).expect("test folder should be created");
+        fs::write(docs.join("guide.md"), "# Guide").expect("nested file should be created");
+
+        delete_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            docs.to_string_lossy().to_string(),
+        )
+        .expect("markdown folder should be deleted");
+
+        assert!(!docs.exists());
 
         fs::remove_dir_all(root).expect("test tree should be removed");
     }

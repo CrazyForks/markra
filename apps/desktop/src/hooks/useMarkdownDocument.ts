@@ -128,6 +128,17 @@ function isEquivalentEditorMarkdown(left: string, right: string) {
   return comparableMarkdown(left) === comparableMarkdown(right);
 }
 
+function normalizeDocumentPath(path: string) {
+  return path.replace(/\\/gu, "/").replace(/\/+$/u, "");
+}
+
+function isDeletedDocumentPath(documentPath: string, deletedPath: string) {
+  const normalizedDocumentPath = normalizeDocumentPath(documentPath);
+  const normalizedDeletedPath = normalizeDocumentPath(deletedPath);
+
+  return normalizedDocumentPath === normalizedDeletedPath || normalizedDocumentPath.startsWith(`${normalizedDeletedPath}/`);
+}
+
 type UseMarkdownDocumentOptions = {
   confirmDiscardUnsavedChanges?: (document: DocumentState) => boolean | Promise<boolean>;
   documentTabsEnabled?: boolean;
@@ -529,14 +540,17 @@ export function useMarkdownDocument({
 
   const detachDeletedDocumentFile = useCallback((path: string) => {
     const currentTabs = tabsRef.current;
-    const deletedTab = currentTabs.find((tab) => tab.path === path);
-    if (!deletedTab && documentRef.current.path !== path) return false;
+    const deletedTab = currentTabs.find((tab) => tab.path !== null && isDeletedDocumentPath(tab.path, path));
+    const currentDocumentPath = documentRef.current.path;
+    if (!deletedTab && (!currentDocumentPath || !isDeletedDocumentPath(currentDocumentPath, path))) return false;
 
-    const nextTabs = currentTabs.filter((tab) => tab.path !== path);
-    const deletedActiveTab = deletedTab?.id === activeTabIdRef.current || documentRef.current.path === path;
+    const nextTabs = currentTabs.filter((tab) => tab.path === null || !isDeletedDocumentPath(tab.path, path));
+    const deletedActiveTab =
+      deletedTab?.id === activeTabIdRef.current ||
+      (currentDocumentPath !== null && isDeletedDocumentPath(currentDocumentPath, path));
 
     if (deletedActiveTab) {
-      const deletedIndex = currentTabs.findIndex((tab) => tab.path === path);
+      const deletedIndex = currentTabs.findIndex((tab) => tab.path !== null && isDeletedDocumentPath(tab.path, path));
       const fallbackTab = nextTabs[Math.max(0, deletedIndex - 1)] ?? nextTabs[0] ?? null;
       setActiveTabState(nextTabs, fallbackTab?.id ?? null);
     } else {
@@ -544,7 +558,8 @@ export function useMarkdownDocument({
       setTabs(nextTabs);
     }
 
-    if (!documentTabsEnabled && documentRef.current.path === path) {
+    const nextDocumentPath = documentRef.current.path;
+    if (!documentTabsEnabled && nextDocumentPath !== null && isDeletedDocumentPath(nextDocumentPath, path)) {
       const nextDocument = {
         content: "",
         dirty: false,

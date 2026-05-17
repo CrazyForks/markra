@@ -543,4 +543,41 @@ describe("useMarkdownDocument", () => {
       path: "/mock-files/test2.md"
     });
   });
+
+  it("clears an active tree file when its containing folder is deleted", async () => {
+    mockedReadNativeMarkdownFile.mockResolvedValueOnce({
+      content: "# Nested guide",
+      name: "guide.md",
+      path: "/mock-files/docs/guide.md"
+    });
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: (fallbackContent) => fallbackContent,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    await act(async () => {
+      await result.current.openTreeMarkdownFile({
+        name: "guide.md",
+        path: "/mock-files/docs/guide.md",
+        relativePath: "docs/guide.md"
+      });
+    });
+
+    act(() => {
+      expect(result.current.detachDeletedDocumentFile("/mock-files/docs")).toBe(true);
+    });
+
+    expect(result.current.document).toMatchObject({
+      content: "",
+      dirty: false,
+      name: "",
+      open: false,
+      path: null
+    });
+  });
 });

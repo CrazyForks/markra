@@ -1235,6 +1235,46 @@ describe("Markra workspace", () => {
     expect(mockedListNativeMarkdownFilesForPath).toHaveBeenCalledWith(mockFolderPath);
   });
 
+  it("deletes a sidebar folder from the context menu", async () => {
+    const docsPath = `${mockFolderPath}/docs`;
+    const docsFolder = { kind: "folder" as const, name: "docs", path: docsPath, relativePath: "docs" };
+    mockedOpenNativeMarkdownPath.mockResolvedValue({
+      kind: "folder",
+      folder: {
+        path: mockFolderPath,
+        name: "vault"
+      }
+    });
+    mockedListNativeMarkdownFilesForPath.mockResolvedValue([
+      docsFolder,
+      { name: "guide.md", path: `${docsPath}/guide.md`, relativePath: "docs/guide.md" }
+    ]);
+    mockedConfirmNativeMarkdownFileDelete.mockResolvedValue(true);
+    mockedDeleteNativeMarkdownTreeFile.mockResolvedValue(undefined);
+
+    renderApp();
+
+    fireEvent.keyDown(window, { key: "o", metaKey: true });
+    expect(await screen.findByRole("heading", { name: "vault" })).toBeInTheDocument();
+
+    const folderButton = await screen.findByRole("button", { name: "docs" });
+    fireEvent.contextMenu(folderButton);
+    const contextHandlers = mockedShowNativeMarkdownFileTreeContextMenu.mock.calls.at(-1)?.[0];
+
+    act(() => {
+      contextHandlers?.deleteFile?.(docsFolder);
+    });
+
+    await waitFor(() =>
+      expect(mockedConfirmNativeMarkdownFileDelete).toHaveBeenCalledWith("docs", {
+        cancelLabel: "Cancel",
+        message: "Delete this folder?",
+        okLabel: "Confirm"
+      })
+    );
+    await waitFor(() => expect(mockedDeleteNativeMarkdownTreeFile).toHaveBeenCalledWith(mockFolderPath, docsPath));
+  });
+
   it("opens a markdown file from the current folder tree", async () => {
     const guidePath = "/mock-files/docs/guide.md";
     const rootTree = [
