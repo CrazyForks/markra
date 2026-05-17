@@ -4110,6 +4110,36 @@ describe("MarkdownPaper editing", () => {
     expect(paragraphs[1]).not.toHaveClass("markra-heading-collapsed-content");
   });
 
+  it("collapses a nested list from the list toggle", async () => {
+    const source = ["- Parent", "  - Child", "- Peer"].join("\n");
+    const { container, editor, view } = await renderEditor(source);
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    const topLevelItems = Array.from(container.querySelectorAll<HTMLElement>(".ProseMirror > ul > li"));
+    const nestedList = container.querySelector<HTMLElement>(".ProseMirror > ul > li > ul");
+    const initialMarkdown = serializeMarkdown(view.state.doc);
+
+    expect(topLevelItems).toHaveLength(2);
+    expect(nestedList).toBeInTheDocument();
+
+    fireEvent.click(within(topLevelItems[0]!).getByRole("button", { name: "Collapse list item" }));
+
+    expect(within(topLevelItems[0]!).getByRole("button", { name: "Expand list item" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(nestedList).toHaveClass("markra-list-collapsed-content");
+    expect(topLevelItems[1]).not.toHaveClass("markra-list-collapsed-content");
+    expect(serializeMarkdown(view.state.doc)).toBe(initialMarkdown);
+
+    fireEvent.click(within(topLevelItems[0]!).getByRole("button", { name: "Expand list item" }));
+
+    expect(within(topLevelItems[0]!).getByRole("button", { name: "Collapse list item" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(nestedList).not.toHaveClass("markra-list-collapsed-content");
+  });
+
   it("expands a rendered heading back to editable markdown source when clicked", async () => {
     const { container, editor, view } = await renderEditor("## Title");
     const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));

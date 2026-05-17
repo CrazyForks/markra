@@ -234,6 +234,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "Arrastar bloco",
   "editor.collapseSection": "Recolher seção",
   "editor.expandSection": "Expandir seção",
+  "editor.collapseListItem": "Recolher item de lista",
+  "editor.expandListItem": "Expandir item de lista",
   "editor.htmlSource": "Código-fonte HTML",
   "editor.htmlSourceApply": "Aplicar código-fonte HTML",
   "editor.table.addColumnRight": "Adicionar coluna à direita",

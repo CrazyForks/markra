@@ -240,6 +240,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "ブロックをドラッグ",
   "editor.collapseSection": "セクションを折りたたむ",
   "editor.expandSection": "セクションを展開",
+  "editor.collapseListItem": "リスト項目を折りたたむ",
+  "editor.expandListItem": "リスト項目を展開",
   "editor.htmlSource": "HTML ソース",
   "editor.htmlSourceApply": "HTML ソースを適用",
   "editor.table.addColumnRight": "右に列を追加",

@@ -357,6 +357,8 @@ export type I18nKey =
   | "editor.blockDrag"
   | "editor.collapseSection"
   | "editor.expandSection"
+  | "editor.collapseListItem"
+  | "editor.expandListItem"
   | "editor.htmlSource"
   | "editor.htmlSourceApply"
   | "editor.table.addColumnRight"

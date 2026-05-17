@@ -234,6 +234,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "Перетащить блок",
   "editor.collapseSection": "Свернуть раздел",
   "editor.expandSection": "Развернуть раздел",
+  "editor.collapseListItem": "Свернуть пункт списка",
+  "editor.expandListItem": "Развернуть пункт списка",
   "editor.htmlSource": "HTML-исходник",
   "editor.htmlSourceApply": "Применить HTML-исходник",
   "editor.table.addColumnRight": "Добавить столбец справа",
