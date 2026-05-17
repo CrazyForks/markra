@@ -1430,7 +1430,7 @@ describe("Markra workspace", () => {
     fireEvent.keyDown(window, { key: "o", metaKey: true });
     expect(await screen.findByRole("complementary", { name: "Markdown file tree" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "assets" }));
+    fireEvent.click(await screen.findByRole("button", { name: "assets" }));
     fireEvent.click(await screen.findByRole("button", { name: "assets/pasted-image.png" }));
 
     const previewImage = await screen.findByRole("img", { name: "pasted-image.png" });
