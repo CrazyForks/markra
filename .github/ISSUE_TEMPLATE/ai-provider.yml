@@ -1,0 +1,93 @@
+name: AI provider issue
+description: Report a problem with AI setup, requests, responses, or provider behavior.
+title: "[AI]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Markra's AI workflows. Do not include API keys, tokens, secrets, or private document content.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I have searched existing issues for the same problem.
+          required: true
+        - label: I have removed or redacted secrets, API keys, and private content.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Markra version
+      description: Use the version from the app or release asset, if available.
+      placeholder: "0.1.18"
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - OpenAI
+        - Anthropic
+        - Google Gemini
+        - DeepSeek
+        - Mistral
+        - Groq
+        - OpenRouter
+        - Together.ai
+        - Qwen
+        - Xiaomi MiMo
+        - Volcengine Ark
+        - xAI
+        - Azure OpenAI
+        - Ollama
+        - OpenAI-compatible endpoint
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model or endpoint
+      description: Include the model name or endpoint type, but do not include credentials.
+      placeholder: "gpt-4.1-mini / local Ollama model / custom OpenAI-compatible endpoint"
+  - type: dropdown
+    id: area
+    attributes:
+      label: AI area
+      options:
+        - Inline AI
+        - AI side panel
+        - Provider settings
+        - Web search
+        - AI edit preview
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the error, unexpected output, or request behavior.
+      placeholder: "The request fails with..., or the preview shows..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open...
+        2. Configure...
+        3. Run...
+        4. See...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Add relevant logs, screenshots, or error text after removing secrets and private content.
+      render: shell
