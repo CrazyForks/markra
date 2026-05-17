@@ -1208,6 +1208,55 @@
     display: none !important;
   }
 
+  .markdown-paper .markra-list-toggle-item {
+    position: relative;
+  }
+
+  .markdown-paper .markra-list-toggle-button {
+    @apply absolute inline-flex size-4 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 outline-none transition-[opacity,color,background-color] duration-150 ease-out focus-visible:bg-(--bg-hover) focus-visible:outline-none;
+    color: color-mix(in srgb, var(--editor-text-secondary) 62%, transparent);
+    left: -2.2em;
+    opacity: 0;
+    top: calc((1lh - 1rem) / 2);
+  }
+
+  .markdown-paper .markra-list-toggle-item:hover > .markra-list-toggle-button,
+  .markdown-paper .markra-list-toggle-item:focus-within > .markra-list-toggle-button,
+  .markdown-paper .markra-list-toggle-item[data-list-collapsed="true"] > .markra-list-toggle-button {
+    opacity: 0.72;
+  }
+
+  .markdown-paper .markra-list-toggle-button:hover,
+  .markdown-paper .markra-list-toggle-button:focus-visible {
+    color: var(--editor-text-secondary);
+    opacity: 1;
+  }
+
+  .markdown-paper .markra-list-toggle-button::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.4px solid currentColor;
+    border-bottom: 1.4px solid currentColor;
+    transform: rotate(45deg);
+    transform-origin: center;
+    transition: transform 120ms ease-out;
+  }
+
+  .markdown-paper .markra-list-toggle-button[data-collapsed="true"]::before {
+    transform: rotate(-45deg);
+  }
+
+  .markdown-paper .markra-list-toggle-item > ul,
+  .markdown-paper .markra-list-toggle-item > ol {
+    margin-left: 0.15em;
+    padding-left: 1.2em;
+  }
+
+  .markdown-paper .markra-list-collapsed-content {
+    display: none !important;
+  }
+
   .markdown-paper p {
     @apply m-0 mb-4.5;
     color: var(--editor-text-primary);

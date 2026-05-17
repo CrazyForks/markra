@@ -234,6 +234,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "Block ziehen",
   "editor.collapseSection": "Abschnitt einklappen",
   "editor.expandSection": "Abschnitt ausklappen",
+  "editor.collapseListItem": "Listeneintrag einklappen",
+  "editor.expandListItem": "Listeneintrag ausklappen",
   "editor.htmlSource": "HTML-Quelle",
   "editor.htmlSourceApply": "HTML-Quelle anwenden",
   "editor.table.addColumnRight": "Spalte rechts hinzufügen",

@@ -7,6 +7,7 @@ export * from "./heading-source.ts";
 export * from "./heading-toggle.ts";
 export * from "./input-rules.ts";
 export * from "./link-image-rules.ts";
+export * from "./list-toggle.ts";
 export * from "./math.ts";
 export * from "./raw-html.ts";
 export * from "./selection-hold.ts";

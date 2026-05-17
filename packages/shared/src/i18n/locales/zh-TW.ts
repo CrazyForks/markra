@@ -240,6 +240,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "拖曳區塊",
   "editor.collapseSection": "摺疊章節",
   "editor.expandSection": "展開章節",
+  "editor.collapseListItem": "摺疊列表項目",
+  "editor.expandListItem": "展開列表項目",
   "editor.htmlSource": "HTML 原始碼",
   "editor.htmlSourceApply": "套用 HTML 原始碼",
   "editor.table.addColumnRight": "在右側新增欄",

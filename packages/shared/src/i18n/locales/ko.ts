@@ -234,6 +234,8 @@ const messages: LocaleMessages = {
   "editor.blockDrag": "블록 드래그",
   "editor.collapseSection": "섹션 접기",
   "editor.expandSection": "섹션 펼치기",
+  "editor.collapseListItem": "목록 항목 접기",
+  "editor.expandListItem": "목록 항목 펼치기",
   "editor.htmlSource": "HTML 소스",
   "editor.htmlSourceApply": "HTML 소스 적용",
   "editor.table.addColumnRight": "오른쪽에 열 추가",

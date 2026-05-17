@@ -11,6 +11,19 @@ describe("editor stylesheet", () => {
     expect(styles).toContain(".markdown-paper tbody tr:nth-child(even)");
   });
 
+  it("positions collapsible list controls", () => {
+    const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
+    const buttonStart = styles.indexOf(".markdown-paper .markra-list-toggle-button {");
+    const buttonEnd = styles.indexOf(".markdown-paper .markra-list-toggle-item:hover");
+    const buttonStyles = styles.slice(buttonStart, buttonEnd);
+
+    expect(styles).toContain(".markdown-paper .markra-list-toggle-item");
+    expect(buttonStyles).toContain("left: -2.2em");
+    expect(buttonStyles).toContain("top: calc((1lh - 1rem) / 2);");
+    expect(styles).toContain(".markdown-paper .markra-list-toggle-item:hover > .markra-list-toggle-button");
+    expect(styles).toContain(".markdown-paper .markra-list-collapsed-content");
+  });
+
   it("keeps table add controls hidden until table hover or focus", () => {
     const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
     const tableControlStart = styles.indexOf(".markdown-paper .markra-table-control {");

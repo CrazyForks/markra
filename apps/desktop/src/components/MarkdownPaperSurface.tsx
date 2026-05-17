@@ -15,6 +15,7 @@ import {
   markraCodeBlockPlugin,
   markraHeadingSourcePlugin,
   markraHeadingTogglePlugin,
+  markraListTogglePlugin,
   markraLinkImageLivePlugin,
   markraLiveMarkdownPlugin,
   markraMarkdownShortcuts,
@@ -134,6 +135,10 @@ function MilkdownEditorSurface({
     collapseSection: t(language, "editor.collapseSection"),
     expandSection: t(language, "editor.expandSection")
   };
+  const listToggleLabels = {
+    collapseListItem: t(language, "editor.collapseListItem"),
+    expandListItem: t(language, "editor.expandListItem")
+  };
   const slashCommandLabels = useMemo<SlashCommandLabels>(() => ({
     menu: t(language, "editor.slashCommands"),
     noResults: t(language, "editor.slashCommandsNoResults"),
@@ -227,6 +232,7 @@ function MilkdownEditorSurface({
         .use(markraAiEditorPreviewPlugin)
         .use(markraBlockDragPlugin(blockDragLabels))
         .use(markraHeadingTogglePlugin(headingToggleLabels))
+        .use(markraListTogglePlugin(listToggleLabels))
         .use(
           markraDocumentLinkCompletionPlugin({
             getDocumentPath: () => documentPathRef.current,
