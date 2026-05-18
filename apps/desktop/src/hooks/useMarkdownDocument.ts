@@ -146,7 +146,7 @@ type UseMarkdownDocumentOptions = {
   getCurrentMarkdown: (fallbackContent: string) => string;
   isCurrentMarkdownEquivalent?: (markdown: string) => boolean | undefined;
   onMarkdownTreeChange?: (path: string) => unknown | Promise<unknown>;
-  onTreeRootFromFolderPath: (path: string, name: string, sessionId?: string | null, clearFilePath?: boolean) => unknown;
+  onTreeRootFromFolderPath: (path: string, name: string, sessionId?: string | null, clearFilePath?: boolean) => unknown | Promise<unknown>;
   onTreeRootFromFilePath: (path: string) => unknown;
   onWorkspaceSessionChange?: (sessionId: string) => unknown;
   preferencesReady?: boolean;
@@ -484,7 +484,7 @@ export function useMarkdownDocument({
 
       const sessionId = resolveWorkspaceSessionId();
       clearOpenDocument({ persistWorkspace: false });
-      onTreeRootFromFolderPath(target.folder.path, target.folder.name, sessionId);
+      await onTreeRootFromFolderPath(target.folder.path, target.folder.name, sessionId);
       return;
     }
 
@@ -661,7 +661,7 @@ export function useMarkdownDocument({
 
         const sessionId = resolveWorkspaceSessionId();
         clearOpenDocument({ persistWorkspace: false });
-        onTreeRootFromFolderPath(target.path, target.name, sessionId);
+        await onTreeRootFromFolderPath(target.path, target.name, sessionId);
         return;
       }
 
@@ -806,9 +806,25 @@ export function useMarkdownDocument({
           assignWorkspaceSessionId(sessionId);
 
           if (workspace.folderPath && workspace.fileTreeOpen) {
-            clearOpenDocument({ persistWorkspace: false });
-            onTreeRootFromFolderPath(workspace.folderPath, workspace.folderName ?? workspace.folderPath, sessionId, !workspace.filePath);
-            restoredWorkspace = true;
+            const folderResult = await onTreeRootFromFolderPath(
+              workspace.folderPath,
+              workspace.folderName ?? workspace.folderPath,
+              sessionId,
+              !workspace.filePath
+            );
+            if (!active) return;
+
+            if (folderResult === null || folderResult === false) {
+              persistWorkspaceState({
+                fileTreeOpen: false,
+                folderName: null,
+                folderPath: null
+              });
+              restoredWorkspace = true;
+            } else {
+              if (!workspace.filePath) clearOpenDocument({ persistWorkspace: false });
+              restoredWorkspace = true;
+            }
           }
 
           if (workspace.filePath) {

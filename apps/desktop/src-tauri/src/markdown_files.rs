@@ -483,14 +483,28 @@ fn collect_markdown_tree_files(
     Ok(())
 }
 
-fn markdown_tree_root_for_path(path: &Path) -> PathBuf {
+fn markdown_tree_root_for_path(path: &Path) -> Result<PathBuf, String> {
     if path.is_dir() {
-        return path.to_path_buf();
+        return Ok(path.to_path_buf());
     }
 
-    path.parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."))
+    if path.is_file() {
+        return path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "Current Markdown folder is invalid".to_string());
+    }
+
+    if is_markdown_open_file(path) || is_markdown_tree_asset_file(path) {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Current Markdown folder is invalid".to_string())?;
+        if parent.is_dir() {
+            return Ok(parent.to_path_buf());
+        }
+    }
+
+    Err("Markdown folder no longer exists".to_string())
 }
 
 fn normalize_markdown_tree_file_name(file_name: &str) -> Result<String, String> {
@@ -827,7 +841,7 @@ fn normalize_markdown_tree_folder_name(folder_name: &str) -> Result<String, Stri
 }
 
 fn canonical_markdown_tree_root(root_path: &Path) -> Result<PathBuf, String> {
-    markdown_tree_root_for_path(root_path)
+    markdown_tree_root_for_path(root_path)?
         .canonicalize()
         .map_err(|error| error.to_string())
 }
@@ -1018,7 +1032,7 @@ fn list_markdown_files_for_path_with_asset_scope(
     allow_root_assets: impl FnOnce(&Path) -> Result<(), String>,
 ) -> Result<Vec<MarkdownFolderFile>, String> {
     let source_path = PathBuf::from(path);
-    let root = markdown_tree_root_for_path(&source_path);
+    let root = markdown_tree_root_for_path(&source_path)?;
     let mut files = Vec::new();
 
     allow_root_assets(&root)?;
@@ -1364,6 +1378,42 @@ mod tests {
         );
 
         fs::remove_dir_all(root).expect("test tree should be removed");
+    }
+
+    #[test]
+    fn rejects_deleted_markdown_folder_roots_instead_of_using_the_parent_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "markra-deleted-folder-root-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("test folder should be created");
+        fs::remove_dir_all(&root).expect("test folder should be removed");
+        let unexpected_file_name = format!(
+            "Should not be created {}",
+            root.file_name()
+                .and_then(|name| name.to_str())
+                .expect("test folder should have a UTF-8 name")
+        );
+        let unexpected_file = root
+            .parent()
+            .expect("test folder should have a parent")
+            .join(format!("{unexpected_file_name}.md"));
+
+        assert!(list_markdown_files_for_path_with_asset_scope(
+            root.to_string_lossy().to_string(),
+            |_| Ok(()),
+        )
+        .is_err());
+        assert!(create_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            unexpected_file_name,
+            None,
+        )
+        .is_err());
+        assert!(!unexpected_file.exists());
     }
 
     #[test]

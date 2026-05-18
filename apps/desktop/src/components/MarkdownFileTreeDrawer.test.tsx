@@ -77,6 +77,46 @@ describe("MarkdownFileTreeDrawer", () => {
 
   it("shows recent folders in a dedicated sidebar section", () => {
     const openRecentFolder = vi.fn();
+    const removeRecentFolder = vi.fn();
+    render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={markdownFiles}
+        open
+        outlineItems={[]}
+        recentFolders={[
+          { name: "notes", path: "/mock-files/notes" },
+          { name: "test", path: "/mock-files/test" }
+        ]}
+        rootName="Obsidian Vault"
+        onOpenFile={() => {}}
+        onRemoveRecentFolder={removeRecentFolder}
+        onOpenRecentFolder={openRecentFolder}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    const recentSection = screen.getByRole("region", { name: "Recently used directories" });
+    const recentHeader = within(recentSection)
+      .getByRole("heading", { name: "Recently used directories" })
+      .closest("div");
+
+    expect(recentSection).toHaveClass("markdown-file-tree-recent-folders");
+    expect(recentHeader?.querySelector(".lucide-folder")).not.toBeInTheDocument();
+    expect(within(recentSection).getByRole("button", { name: "notes" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Directory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Folder..." })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu", { name: "Open Markdown or Folder" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(recentSection).getByRole("button", { name: "notes" }));
+
+    expect(openRecentFolder).toHaveBeenCalledWith({ name: "notes", path: "/mock-files/notes" });
+    expect(removeRecentFolder).not.toHaveBeenCalled();
+  });
+
+  it("collapses recent folders and removes a recent folder without opening it", () => {
+    const openRecentFolder = vi.fn();
+    const removeRecentFolder = vi.fn();
     render(
       <MarkdownFileTreeDrawer
         currentPath="/vault/Untitled.md"
@@ -90,21 +130,40 @@ describe("MarkdownFileTreeDrawer", () => {
         rootName="Obsidian Vault"
         onOpenFile={() => {}}
         onOpenRecentFolder={openRecentFolder}
+        onRemoveRecentFolder={removeRecentFolder}
         onSelectOutlineItem={() => {}}
       />
     );
 
     const recentSection = screen.getByRole("region", { name: "Recently used directories" });
 
-    expect(recentSection).toHaveClass("markdown-file-tree-recent-folders");
     expect(within(recentSection).getByRole("button", { name: "notes" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Directory" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open Folder..." })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menu", { name: "Open Markdown or Folder" })).not.toBeInTheDocument();
 
-    fireEvent.click(within(recentSection).getByRole("button", { name: "notes" }));
+    fireEvent.click(within(recentSection).getByRole("button", { name: "Hide recent directories" }));
 
-    expect(openRecentFolder).toHaveBeenCalledWith({ name: "notes", path: "/mock-files/notes" });
+    expect(within(recentSection).queryByRole("button", { name: "notes" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(recentSection).getByRole("button", { name: "Show recent directories" }));
+    const removeNotes = within(recentSection).getByRole("button", { name: "Remove from recent directories: notes" });
+    const notesRow = removeNotes.closest(".markdown-file-tree-recent-folder");
+
+    expect(notesRow).toBeInTheDocument();
+    expect(removeNotes).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    expect(removeNotes).not.toHaveClass("group-focus-within/recent-folder:opacity-100");
+
+    fireEvent.mouseEnter(notesRow!);
+
+    expect(removeNotes).toHaveStyle({ opacity: "1", pointerEvents: "auto" });
+
+    fireEvent.mouseLeave(notesRow!);
+
+    expect(removeNotes).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+
+    fireEvent.mouseEnter(notesRow!);
+    fireEvent.click(removeNotes);
+
+    expect(removeRecentFolder).toHaveBeenCalledWith({ name: "notes", path: "/mock-files/notes" });
+    expect(openRecentFolder).not.toHaveBeenCalled();
   });
 
   it("collapses and restores the outline panel", () => {
@@ -228,8 +287,8 @@ describe("MarkdownFileTreeDrawer", () => {
     );
 
     expect(screen.queryByRole("button", { name: "New file" })).not.toBeInTheDocument();
-
-    fireEvent.contextMenu(container.querySelector(".file-tree-scroll") as HTMLElement);
+    expect(screen.queryByText("No folder")).not.toBeInTheDocument();
+    expect(container.querySelector(".file-tree-scroll")).not.toBeInTheDocument();
 
     expect(mockedShowNativeMarkdownFileTreeContextMenu).not.toHaveBeenCalled();
     expect(createFile).not.toHaveBeenCalled();

@@ -1,10 +1,15 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useMarkdownDocument } from "./useMarkdownDocument";
 import {
   openNativeMarkdownPath,
   readNativeMarkdownFile,
   watchNativeMarkdownFile
 } from "../lib/tauri";
+import {
+  consumeWelcomeDocumentState,
+  getStoredWorkspaceState,
+  saveStoredWorkspaceState
+} from "../lib/settings/app-settings";
 
 vi.mock("../lib/settings/app-settings", () => ({
   consumeWelcomeDocumentState: vi.fn(),
@@ -26,6 +31,9 @@ vi.mock("../lib/tauri", () => ({
 const mockedOpenNativeMarkdownPath = vi.mocked(openNativeMarkdownPath);
 const mockedReadNativeMarkdownFile = vi.mocked(readNativeMarkdownFile);
 const mockedWatchNativeMarkdownFile = vi.mocked(watchNativeMarkdownFile);
+const mockedConsumeWelcomeDocumentState = vi.mocked(consumeWelcomeDocumentState);
+const mockedGetStoredWorkspaceState = vi.mocked(getStoredWorkspaceState);
+const mockedSaveStoredWorkspaceState = vi.mocked(saveStoredWorkspaceState);
 
 describe("useMarkdownDocument", () => {
   beforeEach(() => {
@@ -33,7 +41,19 @@ describe("useMarkdownDocument", () => {
     mockedOpenNativeMarkdownPath.mockReset();
     mockedReadNativeMarkdownFile.mockReset();
     mockedWatchNativeMarkdownFile.mockReset();
+    mockedConsumeWelcomeDocumentState.mockReset();
+    mockedGetStoredWorkspaceState.mockReset();
+    mockedSaveStoredWorkspaceState.mockReset();
     mockedWatchNativeMarkdownFile.mockResolvedValue(() => {});
+    mockedConsumeWelcomeDocumentState.mockResolvedValue(false);
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: null,
+      filePath: null,
+      fileTreeOpen: false,
+      folderName: null,
+      folderPath: null
+    });
+    mockedSaveStoredWorkspaceState.mockResolvedValue(undefined);
   });
 
   it("does not ask to discard an untouched blank document when the editor still exposes stale markdown", async () => {
@@ -579,5 +599,50 @@ describe("useMarkdownDocument", () => {
       open: false,
       path: null
     });
+  });
+
+  it("skips a restored folder workspace when the folder no longer opens", async () => {
+    const onTreeRootFromFolderPath = vi.fn(async () => null);
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: "session-missing-folder",
+      filePath: null,
+      fileTreeOpen: true,
+      folderName: "notes",
+      folderPath: "/mock-files/deleted-notes"
+    });
+
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: (fallbackContent) => fallbackContent,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath,
+        preferencesReady: true,
+        restoreWorkspaceOnStartup: true
+      })
+    );
+
+    await waitFor(() =>
+      expect(onTreeRootFromFolderPath).toHaveBeenCalledWith(
+        "/mock-files/deleted-notes",
+        "notes",
+        "session-missing-folder",
+        true
+      )
+    );
+    await waitFor(() =>
+      expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({
+        fileTreeOpen: false,
+        folderName: null,
+        folderPath: null
+      })
+    );
+    expect(result.current.document).toMatchObject({
+      content: "",
+      dirty: false,
+      name: "Untitled.md",
+      open: true,
+      path: null
+    });
+    expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
   });
 });

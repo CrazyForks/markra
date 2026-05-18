@@ -51,6 +51,7 @@ import {
   getStoredWorkspaceState,
   initializeStoredAiAgentSession,
   listStoredAiAgentSessions,
+  removeStoredRecentMarkdownFolder,
   resetWelcomeDocumentState,
   saveStoredAiAgentPreferences,
   saveStoredAiAgentSession,
@@ -404,6 +405,7 @@ vi.mock("../lib/settings/app-settings", () => ({
   })),
   normalizeCustomThemeCss: vi.fn((css) => typeof css === "string" ? css.slice(0, 50000) : ":root[data-theme=\"custom\"] { --bg-primary: #fdf6e3; }"),
   resetWelcomeDocumentState: vi.fn(),
+  removeStoredRecentMarkdownFolder: vi.fn(),
   saveStoredAiAgentPreferences: vi.fn(),
   saveStoredAiAgentSession: vi.fn(),
   saveStoredAiAgentSessionTitle: vi.fn(),
@@ -502,6 +504,7 @@ export const mockedGetStoredWebSearchSettings = vi.mocked(getStoredWebSearchSett
 export const mockedGetStoredWorkspaceState = vi.mocked(getStoredWorkspaceState);
 export const mockedInitializeStoredAiAgentSession = vi.mocked(initializeStoredAiAgentSession);
 export const mockedListStoredAiAgentSessions = vi.mocked(listStoredAiAgentSessions);
+export const mockedRemoveStoredRecentMarkdownFolder = vi.mocked(removeStoredRecentMarkdownFolder);
 export const mockedResetWelcomeDocumentState = vi.mocked(resetWelcomeDocumentState);
 export const mockedSaveStoredAiAgentSession = vi.mocked(saveStoredAiAgentSession);
 export const mockedSaveStoredAiAgentPreferences = vi.mocked(saveStoredAiAgentPreferences);
@@ -650,6 +653,7 @@ export function installAppTestHarness() {
     mockedGetStoredWorkspaceState.mockReset();
     mockedInitializeStoredAiAgentSession.mockReset();
     mockedListStoredAiAgentSessions.mockReset();
+    mockedRemoveStoredRecentMarkdownFolder.mockReset();
     mockedResetWelcomeDocumentState.mockReset();
     mockedSaveStoredAiAgentPreferences.mockReset();
     mockedSaveStoredAiAgentSession.mockReset();
@@ -879,6 +883,7 @@ export function installAppTestHarness() {
     mockedSaveStoredAiAgentPreferences.mockResolvedValue(undefined);
     mockedInitializeStoredAiAgentSession.mockResolvedValue(undefined);
     mockedListStoredAiAgentSessions.mockResolvedValue([]);
+    mockedRemoveStoredRecentMarkdownFolder.mockResolvedValue([]);
     mockedDeleteStoredAiAgentSession.mockResolvedValue(undefined);
     mockedSaveStoredAiAgentSession.mockResolvedValue(undefined);
     mockedSaveStoredAiAgentSessionTitle.mockResolvedValue(undefined);

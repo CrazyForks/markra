@@ -284,6 +284,7 @@ export default function App() {
     openFolderPath,
     openMarkdownFolder,
     openRecentFolder,
+    removeRecentFolder,
     renameFile: renameMarkdownTreeFile,
     recentFolders: recentMarkdownFolders,
     refresh: refreshMarkdownFileTree,
@@ -1449,9 +1450,11 @@ export default function App() {
     const canDiscard = await confirmCanDiscardCurrentDocument();
     if (!canDiscard) return;
 
+    const openedFolder = await openRecentFolder(folder);
+    if (!openedFolder) return;
+
     setActiveImageFile(null);
     clearOpenDocument({ persistWorkspace: false });
-    openRecentFolder(folder);
   }, [captureActiveDocumentViewState, clearOpenDocument, confirmCanDiscardCurrentDocument, openRecentFolder]);
   const clearExportSnapshot = useCallback((id: number) => {
     setExportSnapshot((current) => current?.id === id ? null : current);
@@ -1822,6 +1825,7 @@ export default function App() {
               onOpenFile={handleOpenTreeFile}
               onOpenRecentFolder={handleOpenRecentMarkdownFolder}
               onOpenSettings={handleOpenSettings}
+              onRemoveRecentFolder={removeRecentFolder}
               onRenameFile={handleRenameMarkdownTreeFile}
               onResize={resizeFileTree}
               onResizeEnd={endFileTreeResize}

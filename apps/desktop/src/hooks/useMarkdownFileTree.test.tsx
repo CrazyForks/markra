@@ -11,6 +11,7 @@ import {
 import {
   createAiAgentSessionId,
   getStoredRecentMarkdownFolders,
+  removeStoredRecentMarkdownFolder,
   saveStoredRecentMarkdownFolder,
   saveStoredWorkspaceState,
   type RecentMarkdownFolder
@@ -34,6 +35,7 @@ vi.mock("../lib/settings/app-settings", () => ({
     folder,
     ...folders.filter((item) => item.path !== folder.path)
   ].slice(0, 5)),
+  removeStoredRecentMarkdownFolder: vi.fn(),
   saveStoredRecentMarkdownFolder: vi.fn(),
   saveStoredWorkspaceState: vi.fn()
 }));
@@ -47,6 +49,7 @@ const mockedRenameNativeMarkdownTreeFile = vi.mocked(renameNativeMarkdownTreeFil
 const mockedWatchNativeMarkdownTree = vi.mocked(watchNativeMarkdownTree);
 const mockedCreateAiAgentSessionId = vi.mocked(createAiAgentSessionId);
 const mockedGetStoredRecentMarkdownFolders = vi.mocked(getStoredRecentMarkdownFolders);
+const mockedRemoveStoredRecentMarkdownFolder = vi.mocked(removeStoredRecentMarkdownFolder);
 const mockedSaveStoredRecentMarkdownFolder = vi.mocked(saveStoredRecentMarkdownFolder);
 const mockedSaveStoredWorkspaceState = vi.mocked(saveStoredWorkspaceState);
 
@@ -69,6 +72,12 @@ function FileTreeProbe({ currentPath = null }: { currentPath?: string | null }) 
         onClick={() => tree.openRecentFolder?.({ name: "notes", path: "/recent/notes" })}
       >
         Open recent folder
+      </button>
+      <button
+        type="button"
+        onClick={() => tree.removeRecentFolder?.({ name: "notes", path: "/recent/notes" })}
+      >
+        Remove recent folder
       </button>
       <button type="button" onClick={() => tree.toggle(currentPath)}>
         Toggle
@@ -131,10 +140,12 @@ describe("useMarkdownFileTree", () => {
     mockedWatchNativeMarkdownTree.mockReset();
     mockedCreateAiAgentSessionId.mockReset();
     mockedGetStoredRecentMarkdownFolders.mockReset();
+    mockedRemoveStoredRecentMarkdownFolder.mockReset();
     mockedSaveStoredRecentMarkdownFolder.mockReset();
     mockedSaveStoredWorkspaceState.mockReset();
     mockedCreateAiAgentSessionId.mockReturnValue("session-folder");
     mockedGetStoredRecentMarkdownFolders.mockResolvedValue([]);
+    mockedRemoveStoredRecentMarkdownFolder.mockResolvedValue([]);
     mockedSaveStoredRecentMarkdownFolder.mockResolvedValue([]);
     mockedCreateNativeMarkdownTreeFile.mockResolvedValue({
       name: "Daily note.md",
@@ -211,7 +222,7 @@ describe("useMarkdownFileTree", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
 
     expect(await screen.findByText("index.md")).toBeInTheDocument();
-    expect(mockedWatchNativeMarkdownTree).toHaveBeenCalledWith("/vault", expect.any(Function));
+    await waitFor(() => expect(mockedWatchNativeMarkdownTree).toHaveBeenCalledWith("/vault", expect.any(Function)));
 
     const callsBeforeTreeChange = mockedListNativeMarkdownFilesForPath.mock.calls.length;
     await emitTreeChange("/vault/docs/added.md");
@@ -250,6 +261,48 @@ describe("useMarkdownFileTree", () => {
       name: "notes",
       path: "/recent/notes"
     });
+  });
+
+  it("does not open a remembered markdown folder after it was deleted outside Markra", async () => {
+    mockedGetStoredRecentMarkdownFolders.mockResolvedValue([
+      { name: "notes", path: "/recent/notes" }
+    ]);
+    mockedListNativeMarkdownFilesForPath.mockRejectedValue(new Error("Markdown folder no longer exists"));
+
+    render(<FileTreeProbe />);
+
+    expect(await screen.findByText("/recent/notes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open recent folder" }));
+
+    await waitFor(() => expect(mockedListNativeMarkdownFilesForPath).toHaveBeenCalledWith("/recent/notes"));
+    await waitFor(() => expect(screen.queryByText("/recent/notes")).not.toBeInTheDocument());
+    expect(screen.getByTestId("root-name")).toHaveTextContent("No folder");
+    expect(screen.getByTestId("open-state")).toHaveTextContent("closed");
+    expect(mockedSaveStoredRecentMarkdownFolder).not.toHaveBeenCalled();
+    expect(mockedRemoveStoredRecentMarkdownFolder).toHaveBeenCalledWith("/recent/notes");
+    expect(mockedSaveStoredWorkspaceState).not.toHaveBeenCalledWith(expect.objectContaining({
+      folderPath: "/recent/notes"
+    }));
+  });
+
+  it("removes a recent markdown folder without opening it", async () => {
+    mockedGetStoredRecentMarkdownFolders.mockResolvedValue([
+      { name: "notes", path: "/recent/notes" },
+      { name: "test", path: "/recent/test" }
+    ]);
+
+    render(<FileTreeProbe />);
+
+    expect(await screen.findByText("/recent/notes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove recent folder" }));
+
+    await waitFor(() => expect(screen.queryByText("/recent/notes")).not.toBeInTheDocument());
+    expect(screen.getByText("/recent/test")).toBeInTheDocument();
+    expect(mockedRemoveStoredRecentMarkdownFolder).toHaveBeenCalledWith("/recent/notes");
+    expect(mockedListNativeMarkdownFilesForPath).not.toHaveBeenCalled();
+    expect(mockedSaveStoredRecentMarkdownFolder).not.toHaveBeenCalled();
   });
 
   it("creates folders inside a selected nested folder", async () => {

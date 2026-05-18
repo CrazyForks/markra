@@ -20,7 +20,8 @@ import {
   Plus,
   Search,
   Settings,
-  TableOfContents
+  TableOfContents,
+  X
 } from "lucide-react";
 import { clampNumber, t, type AppLanguage } from "@markra/shared";
 import { IconButton } from "@markra/ui";
@@ -50,6 +51,7 @@ type MarkdownFileTreeDrawerProps = {
   onOpenFile: (file: NativeMarkdownFolderFile) => unknown | Promise<unknown>;
   onOpenRecentFolder?: (folder: RecentMarkdownFolder) => unknown | Promise<unknown>;
   onOpenSettings?: () => unknown | Promise<unknown>;
+  onRemoveRecentFolder?: (folder: RecentMarkdownFolder) => unknown | Promise<unknown>;
   onRenameFile?: (file: NativeMarkdownFolderFile, fileName: string) => unknown | Promise<unknown>;
   onResize?: (width: number) => unknown;
   onResizeEnd?: () => unknown;
@@ -243,6 +245,7 @@ export function MarkdownFileTreeDrawer({
   onOpenFile,
   onOpenRecentFolder,
   onOpenSettings = () => {},
+  onRemoveRecentFolder,
   onRenameFile,
   onResize,
   onResizeEnd,
@@ -254,8 +257,11 @@ export function MarkdownFileTreeDrawer({
   const outlineResizeCleanupRef = useRef<(() => unknown) | null>(null);
   const fileTreeBodyRef = useRef<HTMLDivElement | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
+  const [hoveredRecentFolderPath, setHoveredRecentFolderPath] = useState<string | null>(null);
+  const [focusedRecentFolderActionPath, setFocusedRecentFolderActionPath] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [recentFoldersOpen, setRecentFoldersOpen] = useState(true);
   const [outlineOpen, setOutlineOpen] = useState(true);
   const [outlineHeightPercent, setOutlineHeightPercent] = useState(defaultOutlineHeightPercent);
   const [creatingFile, setCreatingFile] = useState(false);
@@ -285,6 +291,7 @@ export function MarkdownFileTreeDrawer({
   const allFoldersExpanded = folderExpansionAvailable && folderPaths.every((folderPath) => expandedFolders.has(folderPath));
   const recentFolderChoices = recentFolders.slice(0, 5);
   const recentFolderAreaVisible = recentFolderChoices.length > 0 && Boolean(onOpenRecentFolder);
+  const filePanelVisible = folderOpen;
   const filePanelStyle = outlineOpen ? { flex: `0 1 ${100 - outlineHeightPercent}%` } : undefined;
   const outlinePanelStyle = outlineOpen ? { flex: `0 1 ${outlineHeightPercent}%` } : undefined;
 
@@ -812,30 +819,77 @@ export function MarkdownFileTreeDrawer({
 
   const renderFolderAccessArea = () => (
     recentFolderAreaVisible ? (
-      <div className="shrink-0 border-b border-(--border-default) bg-(--bg-secondary) py-1">
+      <div className="shrink-0 border-b border-(--border-default) bg-(--bg-secondary)">
         {recentFolderAreaVisible && onOpenRecentFolder ? (
           <section
-            className="markdown-file-tree-recent-folders px-2 py-1"
+            className="markdown-file-tree-recent-folders py-1"
             role="region"
             aria-label={label("app.recentMarkdownFolders")}
           >
-            <h3 className="m-0 px-2 pb-1 text-[11px] leading-4 font-[560] tracking-normal text-(--text-secondary)">
-              {label("app.recentMarkdownFolders")}
-            </h3>
-            <div className="space-y-0.5">
-              {recentFolderChoices.map((folder) => (
-                <button
-                  className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none"
-                  key={folder.path}
-                  type="button"
-                  title={folder.path}
-                  onClick={() => onOpenRecentFolder(folder)}
-                >
-                  <Folder aria-hidden="true" className="shrink-0" size={14} />
-                  <span className="min-w-0 truncate">{folder.name}</span>
-                </button>
-              ))}
+            <div className="flex h-8 items-center gap-1 px-3 pr-2 text-[12px] text-(--text-secondary)">
+              <h3 className="m-0 min-w-0 flex-1 truncate text-[12px] leading-none font-[560] tracking-normal text-(--text-secondary)">
+                {label("app.recentMarkdownFolders")}
+              </h3>
+              <IconButton
+                className="rounded-md"
+                label={recentFoldersOpen ? label("app.hideRecentMarkdownFolders") : label("app.showRecentMarkdownFolders")}
+                pressed={recentFoldersOpen}
+                onClick={() => setRecentFoldersOpen((open) => !open)}
+              >
+                {recentFoldersOpen ? (
+                  <ChevronDown aria-hidden="true" size={14} />
+                ) : (
+                  <ChevronRight aria-hidden="true" size={14} />
+                )}
+              </IconButton>
             </div>
+            {recentFoldersOpen ? (
+              <div className="space-y-0.5 px-2 pb-1">
+                {recentFolderChoices.map((folder) => (
+                  <div
+                    className="markdown-file-tree-recent-folder grid h-7 grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
+                    key={folder.path}
+                    onMouseEnter={() => setHoveredRecentFolderPath(folder.path)}
+                    onMouseLeave={() => {
+                      setHoveredRecentFolderPath((path) => (path === folder.path ? null : path));
+                      setFocusedRecentFolderActionPath((path) => (path === folder.path ? null : path));
+                    }}
+                  >
+                    <button
+                      className="flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none"
+                      type="button"
+                      title={folder.path}
+                      onClick={() => onOpenRecentFolder(folder)}
+                    >
+                      <Folder aria-hidden="true" className="shrink-0" size={14} />
+                      <span className="min-w-0 truncate">{folder.name}</span>
+                    </button>
+                    {onRemoveRecentFolder ? (
+                      (() => {
+                        const actionVisible =
+                          hoveredRecentFolderPath === folder.path || focusedRecentFolderActionPath === folder.path;
+
+                        return (
+                          <IconButton
+                            className="rounded-md transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                            label={`${label("app.removeRecentMarkdownFolder")}: ${folder.name}`}
+                            style={{
+                              opacity: actionVisible ? 1 : 0,
+                              pointerEvents: actionVisible ? "auto" : "none"
+                            }}
+                            onBlur={() => setFocusedRecentFolderActionPath((path) => (path === folder.path ? null : path))}
+                            onFocus={() => setFocusedRecentFolderActionPath(folder.path)}
+                            onClick={() => onRemoveRecentFolder(folder)}
+                          >
+                            <X aria-hidden="true" size={13} />
+                          </IconButton>
+                        );
+                      })()
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
         ) : null}
       </div>
@@ -925,74 +979,76 @@ export function MarkdownFileTreeDrawer({
         {renderFolderAccessArea()}
 
         <div ref={fileTreeBodyRef} className="markdown-file-tree-body flex min-h-0 flex-1 flex-col">
-          <section
-            className={`markdown-file-tree-files flex min-h-0 flex-col ${outlineOpen ? "min-h-24" : "flex-1"}`}
-            style={filePanelStyle}
-          >
-            <div className="flex h-9 shrink-0 items-center gap-1 px-4 text-[13px] text-(--text-secondary)">
-              <div
-                className="flex min-w-0 flex-1 items-center gap-1"
-                onContextMenu={(event) => openContextMenu(event)}
-              >
-                <Folder aria-hidden="true" size={16} />
-                <span className="min-w-0 truncate">{rootName}</span>
-              </div>
-              {fileCreationAvailable ? (
-                <>
-                  {folderExpansionAvailable ? (
+          {filePanelVisible ? (
+            <section
+              className={`markdown-file-tree-files flex min-h-0 flex-col ${outlineOpen ? "min-h-24" : "flex-1"}`}
+              style={filePanelStyle}
+            >
+              <div className="flex h-9 shrink-0 items-center gap-1 px-4 text-[13px] text-(--text-secondary)">
+                <div
+                  className="flex min-w-0 flex-1 items-center gap-1"
+                  onContextMenu={(event) => openContextMenu(event)}
+                >
+                  <Folder aria-hidden="true" size={16} />
+                  <span className="min-w-0 truncate">{rootName}</span>
+                </div>
+                {fileCreationAvailable ? (
+                  <>
+                    {folderExpansionAvailable ? (
+                      <IconButton
+                        className="rounded-md"
+                        label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
+                        pressed={allFoldersExpanded}
+                        onClick={toggleAllFolders}
+                      >
+                        {allFoldersExpanded ? (
+                          <ListChevronsDownUp aria-hidden="true" size={14} />
+                        ) : (
+                          <ListChevronsUpDown aria-hidden="true" size={14} />
+                        )}
+                      </IconButton>
+                    ) : null}
                     <IconButton
                       className="rounded-md"
-                      label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
-                      pressed={allFoldersExpanded}
-                      onClick={toggleAllFolders}
+                      label={label("app.newMarkdownFile")}
+                      onClick={() => startCreatingFile()}
                     >
-                      {allFoldersExpanded ? (
-                        <ListChevronsDownUp aria-hidden="true" size={14} />
-                      ) : (
-                        <ListChevronsUpDown aria-hidden="true" size={14} />
-                      )}
+                      <Plus aria-hidden="true" size={14} />
                     </IconButton>
-                  ) : null}
+                  </>
+                ) : folderExpansionAvailable ? (
                   <IconButton
                     className="rounded-md"
-                    label={label("app.newMarkdownFile")}
-                    onClick={() => startCreatingFile()}
+                    label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
+                    pressed={allFoldersExpanded}
+                    onClick={toggleAllFolders}
                   >
-                    <Plus aria-hidden="true" size={14} />
+                    {allFoldersExpanded ? (
+                      <ListChevronsDownUp aria-hidden="true" size={14} />
+                    ) : (
+                      <ListChevronsUpDown aria-hidden="true" size={14} />
+                    )}
                   </IconButton>
-                </>
-              ) : folderExpansionAvailable ? (
-                <IconButton
-                  className="rounded-md"
-                  label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
-                  pressed={allFoldersExpanded}
-                  onClick={toggleAllFolders}
-                >
-                  {allFoldersExpanded ? (
-                    <ListChevronsDownUp aria-hidden="true" size={14} />
-                  ) : (
-                    <ListChevronsUpDown aria-hidden="true" size={14} />
-                  )}
-                </IconButton>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
 
-            <div
-              className="file-tree-scroll min-h-0 flex-1 overflow-y-auto overscroll-none pb-4"
-              onMouseDown={cancelFileTreeInputsFromBlankArea}
-              onContextMenu={(event) => openContextMenu(event)}
-            >
-              {tree.length > 0 || creatingFile || creatingFolder ? (
-                renderNodes(tree)
-              ) : (
-                <p className="m-0 px-4 py-3 text-[12px] text-(--text-secondary)">
-                  {label("app.noMarkdownFiles")}
-                </p>
-              )}
-            </div>
-          </section>
+              <div
+                className="file-tree-scroll min-h-0 flex-1 overflow-y-auto overscroll-none pb-4"
+                onMouseDown={cancelFileTreeInputsFromBlankArea}
+                onContextMenu={(event) => openContextMenu(event)}
+              >
+                {tree.length > 0 || creatingFile || creatingFolder ? (
+                  renderNodes(tree)
+                ) : (
+                  <p className="m-0 px-4 py-3 text-[12px] text-(--text-secondary)">
+                    {label("app.noMarkdownFiles")}
+                  </p>
+                )}
+              </div>
+            </section>
+          ) : null}
 
-          {outlineOpen ? (
+          {outlineOpen && filePanelVisible ? (
             <div
               className="markdown-file-tree-outline-resizer group relative h-2 shrink-0 cursor-row-resize touch-none outline-none"
               role="separator"
@@ -1010,8 +1066,8 @@ export function MarkdownFileTreeDrawer({
           ) : null}
 
           <section
-            className={`markdown-file-tree-outline flex min-h-0 flex-col ${outlineOpen ? "min-h-20" : "h-9 shrink-0 border-t border-(--border-default)"}`}
-            style={outlinePanelStyle}
+            className={`markdown-file-tree-outline flex min-h-0 flex-col ${outlineOpen ? "min-h-20" : "h-9 shrink-0 border-t border-(--border-default)"} ${filePanelVisible ? "" : "flex-1"}`}
+            style={filePanelVisible ? outlinePanelStyle : undefined}
           >
             <div className="flex h-9 shrink-0 items-center gap-1 px-4 pr-2 text-[13px] text-(--text-secondary)">
               <TableOfContents aria-hidden="true" size={16} />

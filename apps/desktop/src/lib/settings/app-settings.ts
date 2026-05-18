@@ -664,6 +664,20 @@ export async function saveStoredRecentMarkdownFolder(folder: RecentMarkdownFolde
   return folders;
 }
 
+export async function removeStoredRecentMarkdownFolder(path: string) {
+  const normalizedPath = path.trim();
+  const store = await loadSettingsStore();
+  const current = normalizeRecentMarkdownFolders(await store.get<RecentMarkdownFolder[]>(recentMarkdownFoldersKey));
+  const folders = normalizedPath
+    ? current.filter((folder) => folder.path !== normalizedPath)
+    : current;
+
+  await store.set(recentMarkdownFoldersKey, folders);
+  await store.save();
+
+  return folders;
+}
+
 export async function resetWelcomeDocumentState() {
   const store = await loadSettingsStore();
 

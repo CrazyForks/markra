@@ -46,6 +46,7 @@ import {
   mockedOpenNativeExternalUrl,
   mockedOpenSettingsWindow,
   mockedReadNativeMarkdownFile,
+  mockedRemoveStoredRecentMarkdownFolder,
   mockedResetWelcomeDocumentState,
   mockedRenameNativeMarkdownTreeFile,
   mockedResolveDesktopPlatform,
@@ -319,6 +320,28 @@ describe("Markra workspace", () => {
     expect(screen.queryByLabelText("Markdown editor")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Markdown" })).toBeDisabled();
     expect(mockedListNativeMarkdownFilesForPath).toHaveBeenCalledWith(mockFolderPath);
+    expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
+  });
+
+  it("falls back to an empty document when the restored markdown folder is gone", async () => {
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: "session-app",
+      filePath: null,
+      fileTreeOpen: true,
+      folderName: "deleted-notes",
+      folderPath: "/mock-files/deleted-notes"
+    });
+    mockedListNativeMarkdownFilesForPath.mockRejectedValue(new Error("Markdown folder no longer exists"));
+
+    renderApp();
+
+    await waitFor(() => expect(mockedListNativeMarkdownFilesForPath).toHaveBeenCalledWith("/mock-files/deleted-notes"));
+    expect(await screen.findByRole("heading", { name: "Untitled.md" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Markdown editor")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Toggle file list" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("complementary", { name: "Markdown file tree" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No folder")).not.toBeInTheDocument();
+    expect(screen.queryByText("Welcome to Markra")).not.toBeInTheDocument();
     expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
   });
 
@@ -1159,6 +1182,26 @@ describe("Markra workspace", () => {
     });
   });
 
+  it("removes a remembered markdown folder from the sidebar recent folders area", async () => {
+    mockedGetStoredRecentMarkdownFolders.mockResolvedValue([
+      { name: "notes", path: "/mock-files/notes" },
+      { name: "test", path: "/mock-files/test" }
+    ]);
+
+    renderApp();
+
+    await waitFor(() => expect(mockedGetStoredRecentMarkdownFolders).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle file list" }));
+    const recentSection = await screen.findByRole("region", { name: "Recently used directories" });
+
+    fireEvent.click(within(recentSection).getByRole("button", { name: "Remove from recent directories: notes" }));
+
+    await waitFor(() => expect(within(recentSection).queryByRole("button", { name: "notes" })).not.toBeInTheDocument());
+    expect(within(recentSection).getByRole("button", { name: "test" })).toBeInTheDocument();
+    expect(mockedRemoveStoredRecentMarkdownFolder).toHaveBeenCalledWith("/mock-files/notes");
+    expect(mockedListNativeMarkdownFilesForPath).not.toHaveBeenCalled();
+  });
+
   it("opens a markdown folder from the native application menu", async () => {
     mockedOpenNativeMarkdownFolder.mockResolvedValue({
       path: mockFolderPath,
@@ -1577,6 +1620,8 @@ describe("Markra workspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
     expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /guide\.md/ })).toHaveAttribute("aria-selected", "true"));
+    await settleEditorUpdates();
 
     const guideScroll = screen.getByLabelText("Writing surface");
     mockScrollMetrics(guideScroll, {
@@ -1588,6 +1633,8 @@ describe("Markra workspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/notes.md" }));
     expect(await screen.findByText("Notes")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /notes\.md/ })).toHaveAttribute("aria-selected", "true"));
+    await settleEditorUpdates();
 
     const notesScroll = screen.getByLabelText("Writing surface");
     mockScrollMetrics(notesScroll, {
@@ -2707,6 +2754,7 @@ describe("Markra workspace", () => {
       link = document.querySelector<HTMLAnchorElement>('.ProseMirror a[href="./docs/guide.md"]');
       expect(link).toHaveTextContent("Guide");
     });
+    await waitFor(() => expect(mockedListNativeMarkdownFilesForPath).toHaveBeenCalledWith(mockNativePath));
     link!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
 
     expect(await screen.findByText("Opened through a document link.")).toBeInTheDocument();

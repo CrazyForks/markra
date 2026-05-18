@@ -21,6 +21,7 @@ import {
   normalizeWebSearchSettings,
   normalizeExportSettings,
   reorderTitlebarActions,
+  removeStoredRecentMarkdownFolder,
   resetWelcomeDocumentState,
   saveStoredAiAgentSession,
   saveStoredAiAgentPreferences,
@@ -877,6 +878,22 @@ describe("app settings", () => {
     expect(store.set).toHaveBeenCalledWith("recentMarkdownFolders", [
       { name: "vault", path: "/mock-files/vault" },
       { name: "notes", path: "/mock-files/notes" }
+    ]);
+    expect(store.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes a recently used markdown folder", async () => {
+    store.get.mockResolvedValue([
+      { name: "notes", path: "/mock-files/notes" },
+      { name: "vault", path: "/mock-files/vault" }
+    ]);
+
+    await expect(removeStoredRecentMarkdownFolder("/mock-files/notes")).resolves.toEqual([
+      { name: "vault", path: "/mock-files/vault" }
+    ]);
+
+    expect(store.set).toHaveBeenCalledWith("recentMarkdownFolders", [
+      { name: "vault", path: "/mock-files/vault" }
     ]);
     expect(store.save).toHaveBeenCalledTimes(1);
   });
