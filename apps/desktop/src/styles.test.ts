@@ -182,6 +182,25 @@ describe("editor stylesheet", () => {
     expect(codeStyles).toContain("overflow-wrap: anywhere");
   });
 
+  it("folds Mermaid code source while showing the rendered preview", () => {
+    const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
+    const mermaidFoldStart = styles.indexOf(".markdown-paper .markra-code-block[data-mermaid-mode=\"preview\"]");
+    const mermaidFoldEnd = styles.indexOf(".markdown-paper .markra-mermaid-render {");
+    const mermaidFoldStyles = styles.slice(mermaidFoldStart, mermaidFoldEnd);
+
+    expect(mermaidFoldStyles).toContain(".markra-code-line-numbers");
+    expect(mermaidFoldStyles).toContain("pre");
+    expect(mermaidFoldStyles).toContain("display: none");
+    expect(mermaidFoldStyles).toContain("background: transparent");
+    expect(mermaidFoldStyles).toContain("border-color: transparent");
+    expect(mermaidFoldStyles).toContain(".markra-code-language-control");
+    expect(styles).toContain(".markdown-paper .markra-mermaid-preview-button");
+    expect(styles).toContain(
+      ".markdown-paper .markra-code-block[data-mermaid-mode=\"preview\"] .markra-mermaid-render"
+    );
+    expect(styles).toContain(".markdown-paper .markra-code-block[data-mermaid-mode=\"source\"] .markra-code-copy-button");
+  });
+
   it("uses a richer palette for inline code and syntax highlights", () => {
     const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
     const inlineCodeStart = styles.indexOf(".markdown-paper code {");

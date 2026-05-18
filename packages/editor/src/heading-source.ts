@@ -3,7 +3,7 @@ import { headingSchema, paragraphSchema } from "@milkdown/kit/preset/commonmark"
 import type { Node as ProseNode, NodeType } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@milkdown/kit/prose/state";
 import { Transform } from "@milkdown/kit/prose/transform";
-import type { EditorView } from "@milkdown/kit/prose/view";
+import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
 import { $prose } from "@milkdown/kit/utils";
 
 type ActiveHeadingSource = {
@@ -294,6 +294,16 @@ function finalizeInactiveHeadingSource(
 ): Transaction | null {
   if (selectionIsInsideHeadingSource(state, source)) return null;
 
+  return finalizeHeadingSourceTransaction(state, paragraph, heading, source, parseMarkdown);
+}
+
+function finalizeHeadingSourceTransaction(
+  state: EditorState,
+  paragraph: NodeType,
+  heading: NodeType,
+  source: ActiveHeadingSource,
+  parseMarkdown: (markdown: string) => ProseNode
+) {
   const tr = state.tr.setMeta(headingSourceKey, {
     type: "deactivate"
   } satisfies HeadingSourceMeta);
@@ -302,6 +312,24 @@ function finalizeInactiveHeadingSource(
 
   const headingNode = headingNodeFromSource(state, heading, parsedSource, parseMarkdown);
   return tr.replaceWith(parsedSource.from, parsedSource.to, headingNode);
+}
+
+function targetIsInsideActiveHeadingSource(target: EventTarget | null, root: HTMLElement) {
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  const source = element?.closest(".markra-heading-source") ?? null;
+
+  return Boolean(source && root.contains(source));
+}
+
+function buildHeadingSourceDecorations(state: EditorState) {
+  const activeSource = headingSourceKey.getState(state);
+  if (!activeSource) return null;
+
+  return DecorationSet.create(state.doc, [
+    Decoration.node(activeSource.from, activeSource.to, {
+      class: "markra-heading-source"
+    })
+  ]);
 }
 
 export function normalizeHeadingSourceDocument(
@@ -330,6 +358,30 @@ export const markraHeadingSourcePlugin = $prose((ctx) => {
 
   return new Plugin({
     key: headingSourceKey,
+    view: (view) => {
+      const ownerDocument = view.dom.ownerDocument;
+      const handleDocumentPointerDown = (event: PointerEvent) => {
+        const activeSource = headingSourceKey.getState(view.state);
+        if (!activeSource || targetIsInsideActiveHeadingSource(event.target, view.dom)) return;
+
+        const transaction = finalizeHeadingSourceTransaction(
+          view.state,
+          paragraph,
+          heading,
+          activeSource,
+          parseMarkdown.get()
+        );
+        view.dispatch(transaction.scrollIntoView());
+      };
+
+      ownerDocument.addEventListener("pointerdown", handleDocumentPointerDown, true);
+
+      return {
+        destroy() {
+          ownerDocument.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+        }
+      };
+    },
     state: {
       init: (): ActiveHeadingSource | null => null,
       apply(transaction, activeSource: ActiveHeadingSource | null): ActiveHeadingSource | null {
@@ -354,6 +406,7 @@ export const markraHeadingSourcePlugin = $prose((ctx) => {
       return finalizeInactiveHeadingSource(newState, paragraph, heading, activeSource, parseMarkdown.get());
     },
     props: {
+      decorations: buildHeadingSourceDecorations,
       handleDOMEvents: {
         click: (view, event) => {
           if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;

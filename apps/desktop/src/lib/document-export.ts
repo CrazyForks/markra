@@ -247,6 +247,29 @@ body {
   overflow-y: hidden;
 }
 
+.markdown-export .markra-mermaid-render {
+  max-width: 100%;
+  margin: 1.15em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-export .markra-mermaid-render svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.markdown-export .markra-mermaid-render-invalid {
+  padding: 0.75em 1em;
+  border: 1px solid #d68a80;
+  border-radius: 4px;
+  background: #fff3f1;
+  color: #9b2c20;
+  text-align: left;
+}
+
 .markdown-export-page-header,
 .markdown-export-page-footer {
   display: none;

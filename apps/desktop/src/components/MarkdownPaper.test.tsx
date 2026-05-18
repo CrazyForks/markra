@@ -1,4 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (id: string) => ({
+      svg: `<svg id="${id}" data-testid="mock-mermaid"><g></g></svg>`
+    }))
+  }
+}));
+
 import type { Editor } from "@milkdown/kit/core";
 import { editorViewCtx, parserCtx, serializerCtx } from "@milkdown/kit/core";
 import { Slice } from "@milkdown/kit/prose/model";
@@ -17,6 +27,7 @@ import {
   clearAiSelectionHold,
   confirmAiEditorResultApplied,
   defaultMarkdownShortcuts,
+  mermaidThemeFromElement,
   scrollAiEditorPreviewIntoView,
   showAiEditorPreview,
   showAiSelectionHold,
@@ -28,11 +39,13 @@ import {
   readAiTableAnchorsFromView
 } from "../hooks/useEditorController";
 import type { AiSelectionContext } from "@markra/ai";
+import type { EditorTheme } from "../lib/settings/app-settings";
 
 async function renderEditor(
   initialContent = "",
   options: {
     documentPath?: string | null;
+    editorTheme?: EditorTheme;
     onMarkdownChange?: (content: string) => unknown;
     onSaveClipboardImage?: (image: File) => Promise<{ alt: string; src: string } | null>;
     onSaveRemoteClipboardImage?: (image: RemoteClipboardImage) => Promise<{ alt: string; src: string } | null>;
@@ -52,6 +65,7 @@ async function renderEditor(
   const result = render(
     <MarkdownPaper
       documentPath={options.documentPath}
+      editorTheme={options.editorTheme}
       initialContent={initialContent}
       onEditorReady={(instance) => {
         editor = instance;
@@ -624,6 +638,167 @@ describe("MarkdownPaper editing", () => {
     expect(serializeMarkdown(view.state.doc)).toContain(source);
   });
 
+  it("renders Mermaid code blocks as folded diagrams and reveals source for editing", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```", "", "After"].join("\n");
+    const { container, editor, view } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const codeBlock = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block");
+    const lineNumbers = container.querySelector<HTMLElement>(".ProseMirror .markra-code-line-numbers");
+    const copyButton = container.querySelector<HTMLElement>(".ProseMirror .markra-code-copy-button");
+    const languageControl = container.querySelector<HTMLElement>(".ProseMirror .markra-code-language-control");
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+    const sourcePre = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block pre");
+
+    expect(codeBlock).toHaveAttribute("data-language", "mermaid");
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+    expect(copyButton).toHaveAttribute("hidden");
+    expect(languageControl).toHaveAttribute("hidden");
+    expect(preview).not.toHaveAttribute("hidden");
+
+    fireEvent.click(preview!);
+
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "source");
+    expect(copyButton).not.toHaveAttribute("hidden");
+    expect(languageControl).not.toHaveAttribute("hidden");
+    expect(sourcePre).not.toHaveAttribute("hidden");
+    expect(lineNumbers).not.toHaveAttribute("hidden");
+    expect(preview).toHaveAttribute("hidden");
+    expect(container.querySelector(".ProseMirror .markra-code-content")).toHaveTextContent("flowchart TD");
+
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + 1))
+    );
+    document.dispatchEvent(new Event("selectionchange"));
+
+    await waitFor(() => {
+      expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+      expect(copyButton).toHaveAttribute("hidden");
+      expect(languageControl).toHaveAttribute("hidden");
+      expect(preview).not.toHaveAttribute("hidden");
+    });
+
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    expect(serializeMarkdown(view.state.doc)).toContain(source);
+  });
+
+  it("returns a single Mermaid block to preview mode from the source control", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const codeBlock = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block");
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+
+    fireEvent.click(preview!);
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "source");
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview Mermaid diagram" }));
+
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+    expect(preview).not.toHaveAttribute("hidden");
+  });
+
+  it("returns a Mermaid source block to preview mode after clicking editor blank space", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container, view } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const codeBlock = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block");
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+
+    fireEvent.click(preview!);
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "source");
+
+    fireEvent.pointerDown(view.dom);
+
+    await waitFor(() => {
+      expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+      expect(preview).not.toHaveAttribute("hidden");
+    });
+  });
+
+  it("returns a Mermaid source block to preview mode after clicking paper blank space", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const codeBlock = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block");
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+
+    fireEvent.click(preview!);
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "source");
+
+    fireEvent.pointerDown(screen.getByLabelText("Markdown editor"));
+
+    await waitFor(() => {
+      expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+      expect(preview).not.toHaveAttribute("hidden");
+    });
+  });
+
+  it("returns a Mermaid source block to preview mode with Escape", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const codeBlock = container.querySelector<HTMLElement>(".ProseMirror .markra-code-block");
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+    const codeContent = container.querySelector<HTMLElement>(".ProseMirror .markra-code-content");
+
+    fireEvent.click(preview!);
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "source");
+
+    fireEvent.keyDown(codeContent!, { key: "Escape" });
+
+    expect(codeBlock).toHaveAttribute("data-mermaid-mode", "preview");
+    expect(preview).not.toHaveAttribute("hidden");
+  });
+
+  it("uses a dark Mermaid theme for dark editor palettes", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container } = await renderEditor(source, { editorTheme: "night" });
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+
+    expect(preview?.closest(".markdown-paper")).toHaveAttribute("data-editor-theme", "night");
+    expect(mermaidThemeFromElement(preview)).toBe("dark");
+  });
+
+  it("rerenders Mermaid diagrams when the editor theme changes", async () => {
+    const source = ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    const { container } = await renderEditor(source);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-mermaid-render svg")).toBeInTheDocument();
+    });
+    const preview = container.querySelector<HTMLElement>(".ProseMirror .markra-mermaid-render");
+    const paper = preview?.closest<HTMLElement>(".markdown-paper");
+    const initialSvgId = preview?.querySelector("svg")?.id;
+
+    expect(initialSvgId).toBeTruthy();
+
+    paper?.setAttribute("data-editor-theme", "night");
+
+    await waitFor(() => {
+      expect(preview?.querySelector("svg")?.id).not.toBe(initialSvgId);
+    });
+    expect(mermaidThemeFromElement(preview)).toBe("dark");
+  });
+
   it("copies code block content from the inline copy button", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
@@ -991,6 +1166,42 @@ describe("MarkdownPaper editing", () => {
     });
 
     moveCursor(view, source.length + 1);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-math-render-display")).toBeInTheDocument();
+    });
+    expect(container.querySelector(".ProseMirror .markra-math-source-hidden")).toHaveTextContent(source);
+  });
+
+  it("folds math source after clicking editor blank space", async () => {
+    const source = String.raw`$$ E = mc^2 $$`;
+    const { container, view } = await renderEditor(source);
+    const blockFormula = container.querySelector<HTMLElement>(".ProseMirror .markra-math-render-display");
+
+    fireEvent.mouseDown(blockFormula!);
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-math-source-hidden")).not.toBeInTheDocument();
+    });
+
+    fireEvent.pointerDown(view.dom);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-math-render-display")).toBeInTheDocument();
+    });
+    expect(container.querySelector(".ProseMirror .markra-math-source-hidden")).toHaveTextContent(source);
+  });
+
+  it("folds math source after clicking paper blank space", async () => {
+    const source = String.raw`$$ E = mc^2 $$`;
+    const { container } = await renderEditor(source);
+    const blockFormula = container.querySelector<HTMLElement>(".ProseMirror .markra-math-render-display");
+
+    fireEvent.mouseDown(blockFormula!);
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror .markra-math-source-hidden")).not.toBeInTheDocument();
+    });
+
+    fireEvent.pointerDown(screen.getByLabelText("Markdown editor"));
 
     await waitFor(() => {
       expect(container.querySelector(".ProseMirror .markra-math-render-display")).toBeInTheDocument();
@@ -2703,6 +2914,36 @@ describe("MarkdownPaper editing", () => {
     });
   });
 
+  it("does not notify code block selections as automatic AI selection changes", async () => {
+    const onTextSelectionChange = vi.fn();
+    const { view } = await renderEditor(["```ts", "const answer = 42;", "```"].join("\n"), {
+      onTextSelectionChange
+    });
+    const from = findTextPosition(view, "const answer");
+    const to = from + "const answer = 42;".length;
+
+    onTextSelectionChange.mockClear();
+    selectText(view, from, to);
+
+    expect(onTextSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("selects the current code block content with Ctrl+A inside the code editor", async () => {
+    const source = ["Before", "", "```ts", "const answer = 42;", "return answer;", "```", "", "After"].join("\n");
+    const { container, view } = await renderEditor(source);
+    const codeContent = container.querySelector<HTMLElement>(".ProseMirror .markra-code-content");
+
+    moveCursor(view, findTextPosition(view, "answer"));
+
+    expect(codeContent).toBeInTheDocument();
+
+    expect(pressShortcut(view, "a", { ctrlKey: true })).toBe(true);
+
+    expect(view.state.doc.textBetween(view.state.selection.from, view.state.selection.to, "\n")).toBe(
+      "const answer = 42;\nreturn answer;"
+    );
+  });
+
   it("falls back to the current text block when the editor text selection is cleared", async () => {
     const onTextSelectionChange = vi.fn();
     const { view } = await renderEditor("First sentence. Second sentence.", { onTextSelectionChange });
@@ -4208,6 +4449,40 @@ describe("MarkdownPaper editing", () => {
     await settleMarkdownListener();
   });
 
+  it("finalizes expanded heading source after clicking editor blank space", async () => {
+    const { container, view } = await renderEditor("## Title");
+
+    fireEvent.click(container.querySelector<HTMLElement>(".ProseMirror h2")!);
+
+    expect(container.querySelector(".ProseMirror h2")).not.toBeInTheDocument();
+    expect(container.querySelector(".ProseMirror")?.textContent).toBe("## Title");
+
+    fireEvent.pointerDown(view.dom);
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror h2")).toHaveTextContent("Title");
+    });
+    expect(container.querySelector(".ProseMirror")?.textContent).toBe("Title");
+    await settleMarkdownListener();
+  });
+
+  it("finalizes expanded heading source after clicking paper blank space", async () => {
+    const { container } = await renderEditor("## Title");
+
+    fireEvent.click(container.querySelector<HTMLElement>(".ProseMirror h2")!);
+
+    expect(container.querySelector(".ProseMirror h2")).not.toBeInTheDocument();
+    expect(container.querySelector(".ProseMirror")?.textContent).toBe("## Title");
+
+    fireEvent.pointerDown(screen.getByLabelText("Markdown editor"));
+
+    await waitFor(() => {
+      expect(container.querySelector(".ProseMirror h2")).toHaveTextContent("Title");
+    });
+    expect(container.querySelector(".ProseMirror")?.textContent).toBe("Title");
+    await settleMarkdownListener();
+  });
+
   it("renders GFM markdown tables as document tables", async () => {
     const { container } = await renderEditor("| Name | Role |\n| --- | --- |\n| Markra | Editor |");
 
@@ -4345,6 +4620,36 @@ describe("MarkdownPaper editing", () => {
 
     const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
     expect(serializeMarkdown(view.state.doc)).toContain('<div class="example-badge">Beta</div>');
+  });
+
+  it("returns rendered HTML source to preview after clicking editor blank space", async () => {
+    const source = '<div class="example-badge">Alpha</div>';
+    const { container, view } = await renderEditor(source);
+
+    fireEvent.click(container.querySelector<HTMLElement>(".ProseMirror .markra-html-node")!);
+    expect(screen.getByRole("textbox", { name: "HTML source" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(view.dom);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("textbox", { name: "HTML source" })).not.toBeInTheDocument();
+    });
+    expect(container.querySelector(".ProseMirror .markra-html-node")).toHaveTextContent("Alpha");
+  });
+
+  it("returns rendered HTML source to preview after clicking paper blank space", async () => {
+    const source = '<div class="example-badge">Alpha</div>';
+    const { container } = await renderEditor(source);
+
+    fireEvent.click(container.querySelector<HTMLElement>(".ProseMirror .markra-html-node")!);
+    expect(screen.getByRole("textbox", { name: "HTML source" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByLabelText("Markdown editor"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("textbox", { name: "HTML source" })).not.toBeInTheDocument();
+    });
+    expect(container.querySelector(".ProseMirror .markra-html-node")).toHaveTextContent("Alpha");
   });
 
   it("keeps normal finalized link clicks editable and opens links with a modifier click", async () => {
@@ -4608,6 +4913,46 @@ describe("MarkdownPaper editing", () => {
       2
     );
     expect(container.querySelector(".ProseMirror")?.textContent).toBe("[Markra](https://example.com) after");
+    await settleMarkdownListener();
+  });
+
+  it("folds raw link markdown after clicking editor blank space", async () => {
+    const { container, view } = await renderEditor();
+
+    insertTextDirectly(view, "[Markra](https://example.com)");
+    moveCursor(view, findTextPosition(view, "Markra", "Markra".length));
+
+    expectActiveSourceLinkLabel(container, "Markra");
+    expect(container.querySelectorAll(".ProseMirror .markra-live-link-source.markra-md-delimiter")).toHaveLength(2);
+
+    fireEvent.pointerDown(view.dom);
+
+    await waitFor(() => {
+      expectLiveLink(container, "Markra");
+    });
+    expect(container.querySelectorAll(".ProseMirror .markra-live-link-source.markra-md-hidden-delimiter")).toHaveLength(
+      2
+    );
+    await settleMarkdownListener();
+  });
+
+  it("folds typed image markdown after clicking paper blank space", async () => {
+    const { container, view } = await renderEditor();
+
+    insertTextDirectly(view, "![Markra logo](https://example.com/logo.png)");
+    moveCursor(view, findTextPosition(view, "Markra logo", "Markra logo".length));
+
+    expect(container.querySelector(".ProseMirror img.markra-live-image-preview")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".ProseMirror .markra-live-image-source.markra-md-delimiter")).toHaveLength(1);
+
+    fireEvent.pointerDown(screen.getByLabelText("Markdown editor"));
+
+    await waitFor(() => {
+      expectLiveImagePreview(container, "https://example.com/logo.png");
+    });
+    expect(
+      container.querySelectorAll(".ProseMirror .markra-live-image-source.markra-md-hidden-delimiter")
+    ).toHaveLength(1);
     await settleMarkdownListener();
   });
 

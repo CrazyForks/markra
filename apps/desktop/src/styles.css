@@ -2155,6 +2155,10 @@
     transform: translateY(0);
   }
 
+  .markdown-paper .markra-code-block[data-mermaid-mode="source"] .markra-code-copy-button {
+    right: 5.75rem;
+  }
+
   .markdown-paper .markra-code-copy-button:hover,
   .markdown-paper .markra-code-copy-button:focus-visible {
     background: var(--editor-bg-secondary);
@@ -2224,6 +2228,73 @@
 
   .markdown-paper .markra-code-block pre {
     @apply m-0 min-w-0 overflow-auto rounded-none border-0 bg-transparent px-4 py-4;
+  }
+
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] {
+    display: block;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] .markra-code-line-numbers,
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] pre,
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] .markra-code-copy-button,
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] .markra-code-language-control {
+    display: none;
+  }
+
+  .markdown-paper .markra-mermaid-preview-button {
+    @apply absolute top-2 right-2 z-[3] h-7 cursor-pointer rounded-md border border-(--border-default) px-2.5 text-[0.74rem] font-medium outline-none transition-[opacity,transform,color,background-color,border-color,box-shadow] duration-150 ease-out;
+    background: var(--editor-code-control-bg);
+    border-color: var(--editor-border);
+    color: var(--editor-text-secondary);
+  }
+
+  .markdown-paper .markra-mermaid-preview-button[hidden] {
+    display: none;
+  }
+
+  .markdown-paper .markra-mermaid-preview-button:hover,
+  .markdown-paper .markra-mermaid-preview-button:focus-visible {
+    background: var(--editor-bg-secondary);
+    border-color: var(--editor-border-strong);
+    color: var(--editor-text-heading);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .markdown-paper .markra-mermaid-render {
+    @apply mx-4 mb-4 rounded border border-(--border-default) bg-(--bg-primary) p-4;
+    grid-column: 1 / -1;
+    border-color: var(--editor-border);
+    overflow-x: auto;
+    text-align: center;
+  }
+
+  .markdown-paper .markra-code-block[data-mermaid-mode="preview"] .markra-mermaid-render {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .markdown-paper .markra-mermaid-render[hidden],
+  .markdown-paper .markra-mermaid-render-empty {
+    display: none;
+  }
+
+  .markdown-paper .markra-mermaid-render svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .markdown-paper .markra-mermaid-render-invalid {
+    @apply text-[0.86em];
+    background: color-mix(in srgb, oklch(65% 0.19 29) 8%, var(--editor-code-bg));
+    color: oklch(46% 0.17 29);
+    text-align: left;
   }
 
   .markdown-paper .markra-code-block code {

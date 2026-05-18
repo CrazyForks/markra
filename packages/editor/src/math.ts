@@ -528,6 +528,26 @@ function closeInactiveMathSource(state: EditorState) {
   } satisfies MathRenderMeta);
 }
 
+function targetIsInsideActiveMathSource(target: EventTarget | null, root: HTMLElement) {
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  const source = element?.closest(".markra-math-source:not(.markra-math-source-hidden)") ?? null;
+
+  return Boolean(source && root.contains(source));
+}
+
+function closeActiveMathSourceFromPointer(view: EditorView, event: PointerEvent) {
+  const activeSource = mathRenderKey.getState(view.state) as ActiveMathSource | null;
+  if (!activeSource || targetIsInsideActiveMathSource(event.target, view.dom)) return;
+
+  view.dispatch(
+    view.state.tr
+      .setMeta(mathRenderKey, {
+        type: "deactivate"
+      } satisfies MathRenderMeta)
+      .setSelection(TextSelection.create(view.state.doc, activeSource.to))
+  );
+}
+
 function createMathNativeCaretAnchor() {
   return (view: EditorView) => {
     const element = view.dom.ownerDocument.createElement("img");
@@ -640,6 +660,20 @@ function buildMathDecorations(state: EditorState, activeRange: MathRange | null)
 export const markraMathPlugin = $prose(() => {
   return new Plugin({
     key: mathRenderKey,
+    view: (view) => {
+      const ownerDocument = view.dom.ownerDocument;
+      const handleDocumentPointerDown = (event: PointerEvent) => {
+        closeActiveMathSourceFromPointer(view, event);
+      };
+
+      ownerDocument.addEventListener("pointerdown", handleDocumentPointerDown, true);
+
+      return {
+        destroy() {
+          ownerDocument.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+        }
+      };
+    },
     state: {
       init: (): ActiveMathSource | null => null,
       apply(transaction, activeSource: ActiveMathSource | null, _oldState, newState): ActiveMathSource | null {

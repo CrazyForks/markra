@@ -46,6 +46,17 @@ const piAgentDependencies = dependencyPattern(["@mariozechner/pi-agent-core", "@
 const codeEditorDependencies = dependencyPattern(["@codemirror", "codemirror"]);
 const dndDependencies = dependencyPattern(["@dnd-kit"]);
 const mathDependencies = dependencyPattern(["katex"]);
+const diagramDependencies = dependencyPattern([
+  "@mermaid-js",
+  "cytoscape",
+  "d3",
+  "dagre-d3-es",
+  "dompurify",
+  "elkjs",
+  "khroma",
+  "mermaid",
+  "roughjs"
+]);
 const syntaxHighlightDependencies = dependencyPattern(["highlight.js", "lowlight"]);
 const toastDependencies = dependencyPattern(["sonner"]);
 const contentExtractionDependencies = dependencyPattern(["@mozilla/readability"]);
@@ -70,6 +81,7 @@ function vendorChunkName(id: string) {
   if (codeEditorDependencies.test(id)) return "code-editor-vendor";
   if (dndDependencies.test(id)) return "dnd-vendor";
   if (mathDependencies.test(id)) return "math-vendor";
+  if (diagramDependencies.test(id)) return "diagram-vendor";
   if (syntaxHighlightDependencies.test(id)) return "syntax-highlight-vendor";
   if (toastDependencies.test(id)) return "toast-vendor";
   if (contentExtractionDependencies.test(id)) return "content-extraction-vendor";

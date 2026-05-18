@@ -1,9 +1,10 @@
 import { codeBlockSchema } from "@milkdown/kit/preset/commonmark";
-import type { Node as ProseNode, NodeType } from "@milkdown/kit/prose/model";
+import type { Node as ProseNode, NodeType, ResolvedPos } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet, type EditorView, type NodeView, type ViewMutationRecord } from "@milkdown/kit/prose/view";
 import { $prose } from "@milkdown/kit/utils";
 import { common, createLowlight } from "lowlight";
+import { isMermaidLanguage, mermaidThemeFromElement, renderMermaidToSvg } from "./mermaid";
 
 type HighlightAstNode = {
   children?: HighlightAstNode[];
@@ -23,6 +24,11 @@ type HighlightRange = {
 type SplitFenceParagraph = {
   from: number;
   language: string;
+  to: number;
+};
+
+type CodeBlockContentRange = {
+  from: number;
   to: number;
 };
 
@@ -200,6 +206,61 @@ function lineCountForCodeBlock(node: ProseNode) {
   return Math.max(1, node.textContent.split("\n").length);
 }
 
+function codeBlockSelectAllShortcutIsPressed(event: KeyboardEvent) {
+  return (
+    event.key.toLowerCase() === "a" &&
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
+
+function codeBlockContentRangeAtPosition($pos: ResolvedPos, codeBlock: NodeType): CodeBlockContentRange | null {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type === codeBlock) {
+      return {
+        from: $pos.start(depth),
+        to: $pos.end(depth)
+      };
+    }
+  }
+
+  return null;
+}
+
+function codeBlockContentRangeForSelection(state: EditorState, codeBlock: NodeType) {
+  const fromRange = codeBlockContentRangeAtPosition(state.selection.$from, codeBlock);
+  const toRange = codeBlockContentRangeAtPosition(state.selection.$to, codeBlock);
+  if (!fromRange || !toRange) return null;
+  if (fromRange.from !== toRange.from || fromRange.to !== toRange.to) return null;
+
+  return fromRange;
+}
+
+function selectCurrentCodeBlockContent(view: EditorView, codeBlock: NodeType) {
+  const range = codeBlockContentRangeForSelection(view.state, codeBlock);
+  if (!range) return false;
+
+  view.dispatch(
+    view.state.tr
+      .setSelection(TextSelection.create(view.state.doc, range.from, range.to))
+      .scrollIntoView()
+  );
+  view.focus();
+
+  return true;
+}
+
+function selectCodeBlockContentWithShortcut(view: EditorView, codeBlock: NodeType, event: KeyboardEvent) {
+  if (!codeBlockSelectAllShortcutIsPressed(event)) return false;
+
+  const handled = selectCurrentCodeBlockContent(view, codeBlock);
+  if (!handled) return false;
+
+  event.preventDefault();
+  return true;
+}
+
 function targetIsInside(target: EventTarget | Node | null, container: HTMLElement) {
   return target instanceof Node && container.contains(target);
 }
@@ -364,7 +425,14 @@ class MarkraCodeBlockNodeView implements NodeView {
   private readonly lineNumbers: HTMLElement;
   private readonly languageControl: HTMLElement;
   private readonly languageSelect: HTMLSelectElement;
+  private readonly pre: HTMLPreElement;
   private readonly code: HTMLElement;
+  private readonly mermaidPreview: HTMLElement;
+  private readonly mermaidPreviewButton: HTMLButtonElement;
+  private readonly mermaidThemeObserver: MutationObserver | null = null;
+  private mermaidSourceEditing = false;
+  private mermaidRenderSignature = "";
+  private mermaidRenderToken = 0;
 
   constructor(
     node: ProseNode,
@@ -377,8 +445,10 @@ class MarkraCodeBlockNodeView implements NodeView {
     this.lineNumbers = view.dom.ownerDocument.createElement("div");
     this.languageControl = view.dom.ownerDocument.createElement("div");
     this.languageSelect = view.dom.ownerDocument.createElement("select");
-    const pre = view.dom.ownerDocument.createElement("pre");
+    this.pre = view.dom.ownerDocument.createElement("pre");
     this.code = view.dom.ownerDocument.createElement("code");
+    this.mermaidPreview = view.dom.ownerDocument.createElement("div");
+    this.mermaidPreviewButton = view.dom.ownerDocument.createElement("button");
     this.contentDOM = this.code;
 
     this.dom.className = "markra-code-block";
@@ -404,15 +474,45 @@ class MarkraCodeBlockNodeView implements NodeView {
     this.code.setAttribute("spellcheck", "false");
     this.code.setAttribute("autocorrect", "off");
     this.code.setAttribute("autocapitalize", "off");
+    this.mermaidPreview.className = "markra-mermaid-render";
+    this.mermaidPreview.contentEditable = "false";
+    this.mermaidPreview.hidden = true;
+    this.mermaidPreview.tabIndex = 0;
+    this.mermaidPreview.title = "Edit Mermaid source";
+    this.mermaidPreview.setAttribute("aria-busy", "false");
+    this.mermaidPreview.setAttribute("aria-label", "Mermaid diagram");
+    this.mermaidPreviewButton.className = "markra-mermaid-preview-button";
+    this.mermaidPreviewButton.type = "button";
+    this.mermaidPreviewButton.contentEditable = "false";
+    this.mermaidPreviewButton.hidden = true;
+    this.mermaidPreviewButton.setAttribute("aria-label", "Preview Mermaid diagram");
+    this.mermaidPreviewButton.title = "Preview Mermaid diagram";
+    this.mermaidPreviewButton.textContent = "Preview";
 
     this.populateLanguageOptions();
     this.copyButton.addEventListener("click", this.handleCopyClick);
     this.languageSelect.addEventListener("change", this.handleLanguageChange);
+    this.code.addEventListener("keydown", this.handleCodeKeyDown);
+    this.mermaidPreview.addEventListener("click", this.handleMermaidPreviewClick);
+    this.mermaidPreview.addEventListener("keydown", this.handleMermaidPreviewKeyDown);
+    this.mermaidPreviewButton.addEventListener("click", this.handleMermaidPreviewButtonClick);
+    view.dom.ownerDocument.addEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    view.dom.ownerDocument.addEventListener("selectionchange", this.handleDocumentSelectionChange);
+    this.mermaidThemeObserver = this.createMermaidThemeObserver();
     this.languageControl.append(this.languageSelect);
-    pre.append(this.code);
-    this.dom.append(this.lineNumbers, pre, this.copyButton, this.languageControl);
+    this.pre.append(this.code);
+    this.dom.append(
+      this.lineNumbers,
+      this.pre,
+      this.mermaidPreview,
+      this.mermaidPreviewButton,
+      this.copyButton,
+      this.languageControl
+    );
     this.syncLanguage();
     this.syncLineNumbers();
+    this.syncMermaidDisplayMode();
+    this.syncMermaidPreview();
   }
 
   update(nextNode: ProseNode) {
@@ -421,29 +521,239 @@ class MarkraCodeBlockNodeView implements NodeView {
     this.node = nextNode;
     this.syncLanguage();
     this.syncLineNumbers();
+    this.syncMermaidDisplayMode();
+    this.syncMermaidPreview();
     return true;
   }
 
   stopEvent(event: Event) {
     return targetIsInside(event.target, this.copyButton) ||
       targetIsInside(event.target, this.lineNumbers) ||
+      targetIsInside(event.target, this.mermaidPreview) ||
+      targetIsInside(event.target, this.mermaidPreviewButton) ||
       targetIsInside(event.target, this.languageControl);
   }
 
   ignoreMutation(mutation: ViewMutationRecord) {
-    return targetIsInside(mutation.target, this.copyButton) ||
+    return mutation.target === this.dom ||
+      mutation.target === this.pre ||
+      mutation.target === this.lineNumbers ||
+      mutation.target === this.mermaidPreview ||
+      mutation.target === this.mermaidPreviewButton ||
+      targetIsInside(mutation.target, this.copyButton) ||
       targetIsInside(mutation.target, this.lineNumbers) ||
+      targetIsInside(mutation.target, this.mermaidPreview) ||
+      targetIsInside(mutation.target, this.mermaidPreviewButton) ||
       targetIsInside(mutation.target, this.languageControl);
   }
 
   destroy() {
+    this.mermaidRenderToken += 1;
     this.copyButton.removeEventListener("click", this.handleCopyClick);
     this.languageSelect.removeEventListener("change", this.handleLanguageChange);
+    this.code.removeEventListener("keydown", this.handleCodeKeyDown);
+    this.mermaidPreview.removeEventListener("click", this.handleMermaidPreviewClick);
+    this.mermaidPreview.removeEventListener("keydown", this.handleMermaidPreviewKeyDown);
+    this.mermaidPreviewButton.removeEventListener("click", this.handleMermaidPreviewButtonClick);
+    this.dom.ownerDocument.removeEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    this.dom.ownerDocument.removeEventListener("selectionchange", this.handleDocumentSelectionChange);
+    this.mermaidThemeObserver?.disconnect();
     if (this.copyResetTimer !== null) {
       this.dom.ownerDocument.defaultView?.clearTimeout(this.copyResetTimer);
       this.copyResetTimer = null;
     }
   }
+
+  private syncMermaidDisplayMode() {
+    const isMermaid = isMermaidLanguage(codeLanguage(this.node));
+    const hasSource = this.node.textContent.trim().length > 0;
+
+    if (!isMermaid) {
+      this.mermaidSourceEditing = false;
+      delete this.dom.dataset.mermaidMode;
+      this.mermaidPreview.hidden = true;
+      this.mermaidPreviewButton.hidden = true;
+      this.copyButton.hidden = false;
+      this.languageControl.hidden = false;
+      return;
+    }
+
+    const showSource = this.mermaidSourceEditing || !hasSource;
+    const hideCodeChrome = !showSource && hasSource;
+    this.dom.dataset.mermaidMode = showSource ? "source" : "preview";
+    this.mermaidPreview.hidden = showSource || !hasSource;
+    this.mermaidPreviewButton.hidden = !showSource || !hasSource;
+    this.copyButton.hidden = hideCodeChrome;
+    this.languageControl.hidden = hideCodeChrome;
+  }
+
+  private clearMermaidPreview() {
+    this.mermaidRenderSignature = "";
+    this.mermaidRenderToken += 1;
+    this.mermaidPreview.className = "markra-mermaid-render";
+    this.mermaidPreview.removeAttribute("data-error");
+    this.mermaidPreview.setAttribute("aria-busy", "false");
+    this.mermaidPreview.replaceChildren();
+    this.syncMermaidDisplayMode();
+  }
+
+  private syncMermaidPreview() {
+    const language = codeLanguage(this.node);
+    const source = this.node.textContent;
+    if (!isMermaidLanguage(language) || !source.trim()) {
+      this.clearMermaidPreview();
+      return;
+    }
+
+    const theme = mermaidThemeFromElement(this.dom);
+    const signature = `${theme}:${source}`;
+    if (signature === this.mermaidRenderSignature) return;
+
+    this.mermaidRenderSignature = signature;
+    this.mermaidRenderToken += 1;
+    const token = this.mermaidRenderToken;
+
+    this.mermaidPreview.className = "markra-mermaid-render";
+    this.mermaidPreview.removeAttribute("data-error");
+    this.mermaidPreview.setAttribute("aria-busy", "true");
+    this.syncMermaidDisplayMode();
+
+    this.renderMermaidPreview(source, theme, token).catch(() => {});
+  }
+
+  private createMermaidThemeObserver() {
+    const MutationObserverConstructor = this.view.dom.ownerDocument.defaultView?.MutationObserver;
+    if (!MutationObserverConstructor) return null;
+
+    const observer = new MutationObserverConstructor(this.handleMermaidThemeChange);
+    const options = {
+      attributeFilter: ["data-editor-theme", "data-theme"],
+      attributes: true
+    };
+    const paper = this.view.dom.closest(".markdown-paper");
+    if (paper) observer.observe(paper, options);
+    observer.observe(this.view.dom.ownerDocument.documentElement, options);
+
+    return observer;
+  }
+
+  private async renderMermaidPreview(source: string, theme: string, token: number) {
+    try {
+      const svg = await renderMermaidToSvg(source, {
+        idPrefix: "markra-editor-mermaid",
+        theme
+      });
+      if (token !== this.mermaidRenderToken) return;
+
+      this.mermaidPreview.innerHTML = svg;
+      this.mermaidPreview.classList.toggle("markra-mermaid-render-empty", !svg);
+      this.mermaidPreview.setAttribute("aria-busy", "false");
+      this.syncMermaidDisplayMode();
+    } catch (error) {
+      if (token !== this.mermaidRenderToken) return;
+
+      const message = this.dom.ownerDocument.createElement("span");
+      message.className = "markra-mermaid-error";
+      message.textContent = "Unable to render Mermaid diagram";
+
+      this.mermaidPreview.className = "markra-mermaid-render markra-mermaid-render-invalid";
+      this.mermaidPreview.dataset.error = error instanceof Error ? error.message : "Unknown Mermaid render error";
+      this.mermaidPreview.setAttribute("aria-busy", "false");
+      this.mermaidPreview.replaceChildren(message);
+      this.syncMermaidDisplayMode();
+    }
+  }
+
+  private activateMermaidSourceEditing() {
+    if (!isMermaidLanguage(codeLanguage(this.node))) return;
+
+    this.mermaidSourceEditing = true;
+    this.syncMermaidDisplayMode();
+
+    const position = this.getPos();
+    if (typeof position !== "number") return;
+
+    const selectionPosition = position + 1;
+    this.view.dispatch(
+      this.view.state.tr
+        .setSelection(TextSelection.create(this.view.state.doc, selectionPosition))
+        .scrollIntoView()
+    );
+    this.view.focus();
+  }
+
+  private selectionIsInsideNode() {
+    const position = this.getPos();
+    if (typeof position !== "number") return false;
+
+    const { from, to } = this.view.state.selection;
+    return from >= position && to <= position + this.node.nodeSize;
+  }
+
+  private collapseMermaidSourceIfSelectionLeft() {
+    if (!this.dom.isConnected || !this.mermaidSourceEditing || this.selectionIsInsideNode()) return;
+
+    this.deactivateMermaidSourceEditing({ focusPreview: false });
+  }
+
+  private deactivateMermaidSourceEditing({ focusPreview = true }: { focusPreview?: boolean } = {}) {
+    this.mermaidSourceEditing = false;
+    this.syncMermaidDisplayMode();
+    if (focusPreview) this.mermaidPreview.focus();
+  }
+
+  private selectCodeBlockContent() {
+    return selectCurrentCodeBlockContent(this.view, this.node.type);
+  }
+
+  private readonly handleMermaidPreviewClick = (event: MouseEvent) => {
+    event.preventDefault();
+    this.activateMermaidSourceEditing();
+  };
+
+  private readonly handleMermaidPreviewKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    event.preventDefault();
+    this.activateMermaidSourceEditing();
+  };
+
+  private readonly handleMermaidPreviewButtonClick = (event: MouseEvent) => {
+    event.preventDefault();
+    this.deactivateMermaidSourceEditing();
+  };
+
+  private readonly handleCodeKeyDown = (event: KeyboardEvent) => {
+    if (codeBlockSelectAllShortcutIsPressed(event)) {
+      const handled = this.selectCodeBlockContent();
+      if (!handled) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (event.key !== "Escape" || !this.mermaidSourceEditing) return;
+
+    event.preventDefault();
+    this.deactivateMermaidSourceEditing();
+  };
+
+  private readonly handleDocumentPointerDown = (event: PointerEvent) => {
+    if (!this.dom.isConnected || !this.mermaidSourceEditing || targetIsInside(event.target, this.dom)) return;
+
+    this.deactivateMermaidSourceEditing({ focusPreview: false });
+  };
+
+  private readonly handleDocumentSelectionChange = () => {
+    this.dom.ownerDocument.defaultView?.setTimeout(() => {
+      this.collapseMermaidSourceIfSelectionLeft();
+    }, 0);
+  };
+
+  private readonly handleMermaidThemeChange = () => {
+    this.syncMermaidPreview();
+  };
 
   private syncLanguage() {
     const language = codeLanguage(this.node);
@@ -546,7 +856,9 @@ export const markraCodeBlockPlugin = $prose((ctx) => {
       normalizeSplitFenceParagraph(transactions, newState, codeBlock),
     props: {
       decorations: (state) => buildCodeBlockDecorations(state.doc, codeBlock),
-      handleKeyDown: (view, event) => openCodeBlockWithFenceEnter(view, codeBlock, event),
+      handleKeyDown: (view, event) =>
+        selectCodeBlockContentWithShortcut(view, codeBlock, event) ||
+        openCodeBlockWithFenceEnter(view, codeBlock, event),
       handleTextInput: (view, _from, _to, text) =>
         closeCodeBlockWithTrailingFence(view, text) || openCodeBlockWithInsertedFence(view, codeBlock, text),
       nodeViews: {

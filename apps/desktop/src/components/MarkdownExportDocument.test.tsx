@@ -1,4 +1,14 @@
 import { render, waitFor } from "@testing-library/react";
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (id: string) => ({
+      svg: `<svg id="${id}" data-testid="mock-mermaid"><g></g></svg>`
+    }))
+  }
+}));
+
 import { MarkdownExportDocument } from "./MarkdownExportDocument";
 
 describe("MarkdownExportDocument", () => {
@@ -47,6 +57,29 @@ describe("MarkdownExportDocument", () => {
     expect(bodyHtml).toContain("markra-math-render-display");
     expect(bodyHtml).toContain("katex");
     expect(bodyHtml).not.toContain("language-math");
+  });
+
+  it("renders Mermaid code blocks before exporting HTML", async () => {
+    const onRendered = vi.fn();
+
+    render(
+      <MarkdownExportDocument
+        onRendered={onRendered}
+        snapshot={{
+          id: 1,
+          kind: "html",
+          markdown: ["```mermaid", "flowchart TD", "  A --> B", "```"].join("\n"),
+          title: "diagram.md"
+        }}
+      />
+    );
+
+    await waitFor(() => expect(onRendered).toHaveBeenCalledTimes(1));
+
+    const bodyHtml = onRendered.mock.calls[0]?.[0].bodyHtml as string;
+    expect(bodyHtml).toContain("markra-mermaid-render");
+    expect(bodyHtml).toContain("<svg");
+    expect(bodyHtml).not.toContain("language-mermaid");
   });
 
   it("renders GitHub-style alert blockquotes as callouts before exporting HTML", async () => {

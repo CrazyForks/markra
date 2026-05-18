@@ -45,3 +45,15 @@ if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
 if (typeof Range !== "undefined" && !Range.prototype.getBoundingClientRect) {
   Range.prototype.getBoundingClientRect = getBoundingClientRect;
 }
+
+type SvgLayoutPrototype = SVGElement & {
+  getBBox?: () => DOMRect;
+};
+
+if (typeof SVGElement !== "undefined") {
+  const svgPrototype = SVGElement.prototype as SvgLayoutPrototype;
+
+  if (!svgPrototype.getBBox) {
+    svgPrototype.getBBox = getBoundingClientRect;
+  }
+}

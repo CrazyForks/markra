@@ -51,7 +51,7 @@ Download the latest desktop builds from [GitHub Releases](https://github.com/mur
 
 ### WYSIWYG Markdown
 
-- Render links, images, HTML, KaTeX math, and GFM tables inline — expand any element back to source when needed.
+- Render links, images, HTML, KaTeX math, Mermaid diagrams, and GFM tables inline — expand any element back to source when needed.
 - Slash commands and drag handles for block-level editing; full source mode one click away.
 - Adjustable writing width, font size, and line height.
 

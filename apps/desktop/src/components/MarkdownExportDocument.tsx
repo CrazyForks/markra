@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { isMermaidLanguage, mermaidThemeFromElement, renderMermaidToSvg } from "@markra/editor";
 import { parseMarkdownCalloutMarker, type ParsedMarkdownCalloutMarker } from "@markra/shared";
 import type { ExportDocumentFormat } from "../lib/document-export";
 
@@ -52,6 +53,46 @@ function renderMathSource(source: string, kind: "display" | "inline") {
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
+}
+
+function mermaidSourceFromPre(pre: HTMLPreElement) {
+  const code = pre.querySelector("code");
+  if (!code) return null;
+
+  const language = Array.from(code.classList)
+    .find((className) => className.startsWith("language-"))
+    ?.replace(/^language-/u, "");
+  if (!language || !isMermaidLanguage(language)) return null;
+
+  return code.textContent ?? "";
+}
+
+async function renderMermaidExportBlocks(root: HTMLElement) {
+  const blocks = Array.from(root.querySelectorAll<HTMLPreElement>("pre"))
+    .map((pre) => ({
+      pre,
+      source: mermaidSourceFromPre(pre)
+    }))
+    .filter((block): block is { pre: HTMLPreElement; source: string } => block.source !== null);
+
+  await Promise.all(blocks.map(async ({ pre, source }, index) => {
+    const render = root.ownerDocument.createElement("div");
+    render.className = "markra-mermaid-render";
+    render.setAttribute("aria-label", "Mermaid diagram");
+
+    try {
+      render.innerHTML = await renderMermaidToSvg(source, {
+        idPrefix: `markra-export-mermaid-${index}`,
+        theme: mermaidThemeFromElement(root)
+      });
+    } catch (error) {
+      render.className = "markra-mermaid-render markra-mermaid-render-invalid";
+      render.dataset.error = error instanceof Error ? error.message : "Unknown Mermaid render error";
+      render.textContent = "Unable to render Mermaid diagram";
+    }
+
+    pre.replaceWith(render);
+  }));
 }
 
 function removeCalloutMarkerFromChildren(children: ReactNode, marker: string) {
@@ -145,12 +186,34 @@ export function MarkdownExportDocument({
   useEffect(() => {
     if (!snapshot || !articleRef.current) return;
 
-    onRendered({
-      bodyHtml: articleRef.current.innerHTML,
-      id: snapshot.id,
-      kind: snapshot.kind,
-      title: snapshot.title
+    let cancelled = false;
+    const article = articleRef.current;
+    const renderExport = async () => {
+      await renderMermaidExportBlocks(article);
+      if (cancelled) return;
+
+      onRendered({
+        bodyHtml: article.innerHTML,
+        id: snapshot.id,
+        kind: snapshot.kind,
+        title: snapshot.title
+      });
+    };
+
+    renderExport().catch(() => {
+      if (cancelled) return;
+
+      onRendered({
+        bodyHtml: article.innerHTML,
+        id: snapshot.id,
+        kind: snapshot.kind,
+        title: snapshot.title
+      });
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [onRendered, snapshot]);
 
   if (!snapshot) return null;

@@ -443,6 +443,7 @@ function createRawHtmlEditorFrame(
 class MarkraRawHtmlNodeView implements NodeView {
   readonly dom: HTMLElement;
   private editing = false;
+  private sourceInput: HTMLTextAreaElement | null = null;
 
   constructor(
     private node: ProseNode,
@@ -452,6 +453,7 @@ class MarkraRawHtmlNodeView implements NodeView {
   ) {
     this.dom = createRawHtmlRoot(rawHtmlValueFromNode(node), view.dom.ownerDocument);
     this.renderPreview();
+    this.dom.ownerDocument.addEventListener("pointerdown", this.handleDocumentPointerDown, true);
     this.dom.addEventListener("click", (event) => {
       if (this.editing) return;
 
@@ -469,6 +471,10 @@ class MarkraRawHtmlNodeView implements NodeView {
     return true;
   }
 
+  destroy() {
+    this.dom.ownerDocument.removeEventListener("pointerdown", this.handleDocumentPointerDown, true);
+  }
+
   stopEvent(event: Event) {
     return this.editing || this.dom.contains(event.target instanceof Node ? event.target : null);
   }
@@ -479,6 +485,7 @@ class MarkraRawHtmlNodeView implements NodeView {
 
   private renderPreview() {
     this.editing = false;
+    this.sourceInput = null;
     renderRawHtmlPreviewInto(
       this.dom,
       rawHtmlValueFromNode(this.node),
@@ -494,6 +501,7 @@ class MarkraRawHtmlNodeView implements NodeView {
     });
 
     this.editing = true;
+    this.sourceInput = input;
     resetRawHtmlRoot(this.dom);
     decorateRawHtmlRoot(this.dom, rawHtml, true);
     this.dom.replaceChildren(frame);
@@ -525,6 +533,13 @@ class MarkraRawHtmlNodeView implements NodeView {
       input.select();
     });
   }
+
+  private readonly handleDocumentPointerDown = (event: PointerEvent) => {
+    if (!this.editing) return;
+    if (event.target instanceof Node && this.dom.contains(event.target)) return;
+
+    this.commitSource(this.sourceInput?.value ?? rawHtmlValueFromNode(this.node));
+  };
 
   private commitSource(value: string) {
     const nextValue = value;

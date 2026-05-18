@@ -1,15 +1,49 @@
 import { imageSchema, linkSchema } from "@milkdown/kit/preset/commonmark";
-import { Plugin, PluginKey } from "@milkdown/kit/prose/state";
+import { Plugin, PluginKey, type EditorState } from "@milkdown/kit/prose/state";
 import { $prose } from "@milkdown/kit/utils";
 import { buildLiveLinkImageDecorations } from "./decorations.ts";
 import { replaceRawMarkdownTarget } from "./finalize.ts";
 import { createFinalizedImageNodeView } from "./images.ts";
 import { expandFinalizedLinkMarkdown, linkElementFromEventTarget } from "./links.ts";
 import { findActiveRawMarkdownRange } from "./ranges.ts";
-import type { ResolveMarkdownImageSrc } from "./types.ts";
+import type { AbsoluteRawMarkdownRange, ResolveMarkdownImageSrc } from "./types.ts";
 
-const linkImageLiveKey = new PluginKey("markra-link-image-live-markdown");
+type SuppressedLiveMarkdownRange = {
+  from: number;
+  to: number;
+};
+
+type LinkImageLiveState = {
+  suppressedRange: SuppressedLiveMarkdownRange | null;
+};
+
+type LinkImageLiveMeta = {
+  range: SuppressedLiveMarkdownRange;
+  type: "suppress";
+};
+
+const linkImageLiveKey = new PluginKey<LinkImageLiveState>("markra-link-image-live-markdown");
 const linkOpenModifierClass = "markra-link-open-modifier-active";
+
+function sameRange(left: SuppressedLiveMarkdownRange | null, right: AbsoluteRawMarkdownRange | null) {
+  return Boolean(left && right && left.from === right.from && left.to === right.to);
+}
+
+function targetIsInsideActiveLiveMarkdownSource(target: EventTarget | null, root: HTMLElement) {
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  const source = element?.closest(
+    ".markra-live-link-source.markra-md-delimiter, .markra-live-link-source-label, .markra-live-image-source.markra-md-delimiter"
+  ) ?? null;
+
+  return Boolean(source && root.contains(source));
+}
+
+function activeLiveMarkdownRange(state: EditorState) {
+  const range = findActiveRawMarkdownRange(state);
+  const liveState = linkImageLiveKey.getState(state);
+
+  return sameRange(liveState?.suppressedRange ?? null, range) ? null : range;
+}
 
 export function markraLinkImageLivePlugin(resolveImageSrc?: ResolveMarkdownImageSrc) {
   return $prose((ctx) => {
@@ -28,9 +62,24 @@ export function markraLinkImageLivePlugin(resolveImageSrc?: ResolveMarkdownImage
         const clearModifierState = () => {
           view.dom.classList.remove(linkOpenModifierClass);
         };
+        const suppressActiveLiveMarkdownSource = (event: PointerEvent) => {
+          const range = findActiveRawMarkdownRange(view.state);
+          if (!range || targetIsInsideActiveLiveMarkdownSource(event.target, view.dom)) return;
+
+          view.dispatch(
+            view.state.tr.setMeta(linkImageLiveKey, {
+              range: {
+                from: range.from,
+                to: range.to
+              },
+              type: "suppress"
+            } satisfies LinkImageLiveMeta)
+          );
+        };
 
         ownerDocument.addEventListener("keydown", syncModifierState, true);
         ownerDocument.addEventListener("keyup", syncModifierState, true);
+        ownerDocument.addEventListener("pointerdown", suppressActiveLiveMarkdownSource, true);
         ownerWindow?.addEventListener("blur", clearModifierState);
 
         return {
@@ -38,13 +87,35 @@ export function markraLinkImageLivePlugin(resolveImageSrc?: ResolveMarkdownImage
             clearModifierState();
             ownerDocument.removeEventListener("keydown", syncModifierState, true);
             ownerDocument.removeEventListener("keyup", syncModifierState, true);
+            ownerDocument.removeEventListener("pointerdown", suppressActiveLiveMarkdownSource, true);
             ownerWindow?.removeEventListener("blur", clearModifierState);
           }
         };
       },
+      state: {
+        init: (): LinkImageLiveState => ({
+          suppressedRange: null
+        }),
+        apply(transaction, liveState): LinkImageLiveState {
+          const meta = transaction.getMeta(linkImageLiveKey) as LinkImageLiveMeta | undefined;
+          if (meta?.type === "suppress") {
+            return {
+              suppressedRange: meta.range
+            };
+          }
+
+          if (transaction.docChanged || transaction.selectionSet) {
+            return {
+              suppressedRange: null
+            };
+          }
+
+          return liveState;
+        }
+      },
       props: {
         decorations: (state) =>
-          buildLiveLinkImageDecorations(state.doc, findActiveRawMarkdownRange(state), link, resolveImageSrc),
+          buildLiveLinkImageDecorations(state.doc, activeLiveMarkdownRange(state), link, resolveImageSrc),
         handleDOMEvents: {
           click: (view, event) => {
             if (event.metaKey || event.ctrlKey) return false;

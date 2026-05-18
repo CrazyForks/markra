@@ -13,6 +13,8 @@ import {
   plugins as gfmPlugins,
   schema as gfmSchema
 } from "@milkdown/kit/preset/gfm";
+import type { ResolvedPos } from "@milkdown/kit/prose/model";
+import type { Selection } from "@milkdown/kit/prose/state";
 import { Plugin } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { $prose } from "@milkdown/kit/utils";
@@ -36,6 +38,18 @@ export const markraGfm = [
   gfmPlugins
 ].flat();
 
+function positionHasAncestorNodeName($pos: ResolvedPos, nodeName: string) {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type.name === nodeName) return true;
+  }
+
+  return false;
+}
+
+function selectionIsInsideNodeName(selection: Selection, nodeName: string) {
+  return [selection.$from, selection.$to].every(($pos) => positionHasAncestorNodeName($pos, nodeName));
+}
+
 export function markraTextSelectionObserverPlugin(
   onTextSelectionChange: (selection: AiSelectionContext | null) => unknown
 ) {
@@ -44,6 +58,14 @@ export function markraTextSelectionObserverPlugin(
 
     const notifySelectionChange = (view: EditorView, options: { requireFocusForEmptySelection: boolean }) => {
       const { selection } = view.state;
+
+      if (selectionIsInsideNodeName(selection, "code_block")) {
+        if (lastSignature) {
+          lastSignature = "";
+          onTextSelectionChange(null);
+        }
+        return;
+      }
 
       if (selection.empty) {
         if (options.requireFocusForEmptySelection && !view.hasFocus()) return;
