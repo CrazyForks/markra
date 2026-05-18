@@ -52,6 +52,7 @@ import {
   initializeStoredAiAgentSession,
   listStoredAiAgentSessions,
   resetWelcomeDocumentState,
+  saveStoredAiAgentPreferences,
   saveStoredAiAgentSession,
   saveStoredAiAgentSessionTitle,
   saveStoredAiSettings,
@@ -503,6 +504,7 @@ export const mockedInitializeStoredAiAgentSession = vi.mocked(initializeStoredAi
 export const mockedListStoredAiAgentSessions = vi.mocked(listStoredAiAgentSessions);
 export const mockedResetWelcomeDocumentState = vi.mocked(resetWelcomeDocumentState);
 export const mockedSaveStoredAiAgentSession = vi.mocked(saveStoredAiAgentSession);
+export const mockedSaveStoredAiAgentPreferences = vi.mocked(saveStoredAiAgentPreferences);
 export const mockedSaveStoredAiAgentSessionTitle = vi.mocked(saveStoredAiAgentSessionTitle);
 export const mockedSaveStoredAiSettings = vi.mocked(saveStoredAiSettings);
 export const mockedSaveStoredCustomThemeCss = vi.mocked(saveStoredCustomThemeCss);
@@ -649,6 +651,7 @@ export function installAppTestHarness() {
     mockedInitializeStoredAiAgentSession.mockReset();
     mockedListStoredAiAgentSessions.mockReset();
     mockedResetWelcomeDocumentState.mockReset();
+    mockedSaveStoredAiAgentPreferences.mockReset();
     mockedSaveStoredAiAgentSession.mockReset();
     mockedSaveStoredAiAgentSessionTitle.mockReset();
     mockedSaveStoredAiSettings.mockReset();
@@ -873,6 +876,7 @@ export function installAppTestHarness() {
       folderPath: null
     });
     mockedResetWelcomeDocumentState.mockResolvedValue(undefined);
+    mockedSaveStoredAiAgentPreferences.mockResolvedValue(undefined);
     mockedInitializeStoredAiAgentSession.mockResolvedValue(undefined);
     mockedListStoredAiAgentSessions.mockResolvedValue([]);
     mockedDeleteStoredAiAgentSession.mockResolvedValue(undefined);

@@ -634,6 +634,32 @@ describe("documentAgentTools", () => {
     expect(toolText(result)).toContain("Prepared an insertion preview at after_anchor (heading:1).");
   });
 
+  it("prepares a cursor insertion at the end of the document when no editor selection is active", async () => {
+    const onPreviewResult = vi.fn();
+    const tool = createDocumentAgentTools({
+      documentContent: "# Title\n\nBody",
+      documentEndPosition: 14,
+      documentPath: "/vault/README.md",
+      onPreviewResult,
+      selection: null,
+      workspaceFiles: []
+    }).find((item) => item.name === "insert_markdown");
+
+    const result = await tool?.execute("tool_insert_markdown", {
+      content: "\n\nContinue here.",
+      placement: "cursor"
+    });
+
+    expect(onPreviewResult).toHaveBeenCalledWith({
+      from: 14,
+      original: "",
+      replacement: "\n\nContinue here.",
+      to: 14,
+      type: "insert"
+    }, expect.any(String));
+    expect(toolText(result)).toContain("Prepared an insertion preview at cursor.");
+  });
+
   it("rejects anchor-based insertion when the anchor is missing", async () => {
     const tool = createDocumentAgentTools({
       documentContent: "# Title\n\nBody",

@@ -1,4 +1,4 @@
-import type { AiProviderApiStyle, AiProviderConfigSeed } from "./types";
+import type { AiProviderApiStyle, AiProviderConfigSeed, AiProviderRequestStyle } from "./types";
 
 export const defaultApiUrlByApiStyle: Partial<Record<AiProviderApiStyle, string>> = {
   anthropic: "https://api.anthropic.com/v1",
@@ -12,6 +12,13 @@ export const defaultApiUrlByApiStyle: Partial<Record<AiProviderApiStyle, string>
   openrouter: "https://openrouter.ai/api/v1",
   together: "https://api.together.xyz/v1",
   xai: "https://api.x.ai/v1"
+};
+
+export const defaultApiUrlByRequestStyle: Partial<Record<AiProviderRequestStyle, string>> = {
+  anthropic: "https://api.anthropic.com/v1",
+  google: "https://generativelanguage.googleapis.com/v1beta",
+  "openai-compatible": "https://api.openai.com/v1",
+  "openai-responses": "https://api.openai.com/v1"
 };
 
 export const defaultProviderTemplates: AiProviderConfigSeed[] = [
@@ -29,6 +36,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["image"], enabled: true, id: "gpt-image-2", name: "GPT Image 2" }
     ],
     name: "OpenAI",
+    apiStyle: "openai-responses",
     type: "openai"
   },
   {
@@ -43,6 +51,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "vision", "reasoning", "tools"], enabled: true, id: "claude-haiku-4-5", name: "Claude Haiku 4.5" }
     ],
     name: "Anthropic",
+    apiStyle: "anthropic",
     type: "anthropic"
   },
   {
@@ -62,6 +71,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       }
     ],
     name: "Google",
+    apiStyle: "google",
     type: "google"
   },
   {
@@ -75,6 +85,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "reasoning", "tools"], enabled: true, id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }
     ],
     name: "DeepSeek",
+    apiStyle: "openai-compatible",
     type: "deepseek"
   },
   {
@@ -90,6 +101,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "tools"], enabled: true, id: "devstral-latest", name: "Devstral 2" }
     ],
     name: "Mistral",
+    apiStyle: "openai-compatible",
     type: "mistral"
   },
   {
@@ -105,6 +117,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "tools"], enabled: true, id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" }
     ],
     name: "Groq",
+    apiStyle: "openai-compatible",
     type: "groq"
   },
   {
@@ -121,6 +134,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "vision", "reasoning", "tools", "web"], enabled: true, id: "google/gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" }
     ],
     name: "OpenRouter",
+    apiStyle: "openai-compatible",
     type: "openrouter"
   },
   {
@@ -140,6 +154,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "reasoning", "tools"], enabled: true, id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1" }
     ],
     name: "Together.ai",
+    apiStyle: "openai-compatible",
     type: "together"
   },
   {
@@ -155,6 +170,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "vision", "reasoning", "tools", "web"], enabled: true, id: "qwen3.5-flash", name: "Qwen3.5 Flash" }
     ],
     name: "Qwen",
+    apiStyle: "openai-compatible",
     type: "openai-compatible"
   },
   {
@@ -169,6 +185,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "tools", "web"], enabled: true, id: "mimo-v2.5-flash", name: "MiMo V2.5 Flash" }
     ],
     name: "Xiaomi MiMo",
+    apiStyle: "openai-compatible",
     type: "openai-compatible"
   },
   {
@@ -184,6 +201,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "reasoning"], enabled: true, id: "deepseek-r1-250528", name: "DeepSeek R1" }
     ],
     name: "Volcengine Ark",
+    apiStyle: "openai-compatible",
     type: "openai-compatible"
   },
   {
@@ -197,6 +215,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "vision", "reasoning", "tools", "web"], enabled: true, id: "grok-4.3-fast", name: "Grok 4.3 Fast" }
     ],
     name: "xAI",
+    apiStyle: "openai-compatible",
     type: "xai"
   },
   {
@@ -211,6 +230,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text", "vision", "reasoning", "tools", "web"], enabled: true, id: "gpt-5.4-nano", name: "GPT-5.4 nano deployment" }
     ],
     name: "Azure OpenAI",
+    apiStyle: "openai-compatible",
     type: "azure-openai"
   },
   {
@@ -225,6 +245,7 @@ export const defaultProviderTemplates: AiProviderConfigSeed[] = [
       { capabilities: ["text"], enabled: true, id: "gpt-oss:20b", name: "GPT-OSS 20B" }
     ],
     name: "Ollama",
+    apiStyle: "openai-compatible",
     type: "ollama"
   }
 ];
@@ -249,6 +270,10 @@ export function defaultProviderTemplateForProviderId(providerId: string): AiProv
 
 export function defaultApiUrlForApiStyle(apiStyle: AiProviderApiStyle) {
   return defaultApiUrlByApiStyle[apiStyle] ?? "";
+}
+
+export function defaultApiUrlForRequestStyle(apiStyle: AiProviderRequestStyle) {
+  return defaultApiUrlByRequestStyle[apiStyle] ?? "";
 }
 
 export function defaultApiUrlForStoredProvider(providerId: string, type: AiProviderApiStyle) {

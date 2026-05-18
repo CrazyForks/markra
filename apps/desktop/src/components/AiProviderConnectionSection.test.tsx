@@ -9,6 +9,7 @@ function translate(key: I18nKey) {
     "settings.ai.apiAddress": "API URL",
     "settings.ai.apiKey": "API key",
     "settings.ai.apiStyle": "API style",
+    "settings.ai.apiStyleOpenAiCompatible": "OpenAI compatible",
     "settings.ai.cancelEditModel": "Cancel",
     "settings.ai.customHeaders": "Custom headers",
     "settings.ai.customHeadersDescription": "Added to model list and chat requests.",
@@ -63,6 +64,127 @@ function replaceCodeMirrorDoc(view: EditorView, value: string) {
 }
 
 describe("AiProviderConnectionSection", () => {
+  it("lets OpenAI choose the supported OpenAI request styles", () => {
+    const updateSelectedProvider = vi.fn();
+
+    render(
+      <AiProviderConnectionSection
+        actionState={{ status: "idle" }}
+        isCustomProvider={false}
+        provider={provider({
+          apiStyle: "openai-responses",
+          id: "openai",
+          name: "OpenAI",
+          type: "openai"
+        } as Partial<AiProviderConfig>)}
+        translate={translate}
+        onTestProvider={() => {}}
+        updateSelectedProvider={updateSelectedProvider}
+      />
+    );
+
+    const apiStyleSelect = screen.getByLabelText("API style");
+    expect(within(apiStyleSelect).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "OpenAI Responses",
+      "OpenAI compatible"
+    ]);
+
+    fireEvent.change(apiStyleSelect, { target: { value: "openai-compatible" } });
+
+    expect(updateSelectedProvider).toHaveBeenCalledWith(expect.any(Function));
+    const updater = updateSelectedProvider.mock.calls.at(-1)?.[0] as (current: AiProviderConfig) => AiProviderConfig;
+    expect(updater(provider({ apiStyle: "openai-responses", type: "openai" } as Partial<AiProviderConfig>))).toMatchObject({
+      apiStyle: "openai-compatible",
+      type: "openai"
+    });
+  });
+
+  it("hides API style for fixed built-in providers", () => {
+    const updateSelectedProvider = vi.fn();
+
+    render(
+      <AiProviderConnectionSection
+        actionState={{ status: "idle" }}
+        isCustomProvider={false}
+        provider={provider({
+          apiStyle: "openai-compatible",
+          id: "groq",
+          name: "Groq",
+          type: "groq"
+        } as Partial<AiProviderConfig>)}
+        translate={translate}
+        onTestProvider={() => {}}
+        updateSelectedProvider={updateSelectedProvider}
+      />
+    );
+
+    expect(screen.queryByRole("combobox", { name: "API style" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("API style")).not.toBeInTheDocument();
+    expect(screen.queryByText("API style")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenAI compatible")).not.toBeInTheDocument();
+  });
+
+  it("hides API key settings for providers that do not need keys", () => {
+    const updateSelectedProvider = vi.fn();
+
+    render(
+      <AiProviderConnectionSection
+        actionState={{ status: "idle" }}
+        isCustomProvider={false}
+        provider={provider({
+          apiKey: "",
+          baseUrl: "http://localhost:11434/v1",
+          id: "ollama",
+          name: "Ollama",
+          type: "ollama"
+        } as Partial<AiProviderConfig>)}
+        translate={translate}
+        onTestProvider={() => {}}
+        updateSelectedProvider={updateSelectedProvider}
+      />
+    );
+
+    expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
+    expect(screen.queryByText("API keys are stored locally.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("API URL")).toHaveValue("http://localhost:11434/v1");
+  });
+
+  it("lets custom providers choose any supported API style", () => {
+    const updateSelectedProvider = vi.fn();
+
+    render(
+      <AiProviderConnectionSection
+        actionState={{ status: "idle" }}
+        isCustomProvider={true}
+        provider={provider()}
+        translate={translate}
+        onTestProvider={() => {}}
+        updateSelectedProvider={updateSelectedProvider}
+      />
+    );
+
+    const apiStyleSelect = screen.getByLabelText("API style");
+    expect(within(apiStyleSelect).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "OpenAI Responses",
+      "OpenAI compatible",
+      "Anthropic",
+      "Google (Gemini)"
+    ]);
+
+    fireEvent.change(apiStyleSelect, { target: { value: "anthropic" } });
+
+    expect(updateSelectedProvider).toHaveBeenCalledWith(expect.any(Function));
+    const updater = updateSelectedProvider.mock.calls.at(-1)?.[0] as (current: AiProviderConfig) => AiProviderConfig;
+    expect(updater(provider())).toMatchObject({
+      apiStyle: "anthropic",
+      baseUrl: "https://proxy.example.test/v1"
+    });
+    expect(updater(provider({ baseUrl: "" }))).toMatchObject({
+      apiStyle: "anthropic",
+      baseUrl: "https://api.anthropic.com/v1"
+    });
+  });
+
   it("lets custom providers configure request headers without exposing thinking request body settings", async () => {
     const updateSelectedProvider = vi.fn();
 

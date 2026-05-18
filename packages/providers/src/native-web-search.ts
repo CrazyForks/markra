@@ -30,6 +30,10 @@ export function getNativeWebSearchKind(provider: AiProviderConfig, model: Native
 
   if (!modelSupportsConfiguredWebSearch(provider, model)) return null;
 
+  if (provider.apiStyle === "openai-responses") return "openai-responses";
+  if (provider.apiStyle === "anthropic") return "anthropic-server-tool";
+  if (provider.apiStyle === "google") return "google-search-grounding";
+
   if (provider.type === "openai") return "openai-responses";
   if (provider.type === "xai") return "openai-responses";
   if (provider.type === "anthropic") return "anthropic-server-tool";

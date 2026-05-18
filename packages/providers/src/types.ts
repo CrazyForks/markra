@@ -13,7 +13,15 @@ export const aiProviderApiStyles = [
   "ollama"
 ] as const;
 
+export const aiProviderRequestStyles = [
+  "openai-responses",
+  "openai-compatible",
+  "anthropic",
+  "google"
+] as const;
+
 export type AiProviderApiStyle = (typeof aiProviderApiStyles)[number];
+export type AiProviderRequestStyle = (typeof aiProviderRequestStyles)[number];
 export type AiModelCapability = "image" | "reasoning" | "text" | "tools" | "vision" | "web";
 
 export type AiProviderModel = {
@@ -32,6 +40,7 @@ export type AiProviderConfig = {
   id: string;
   models: AiProviderModel[];
   name: string;
+  apiStyle?: AiProviderRequestStyle;
   type: AiProviderApiStyle;
 };
 

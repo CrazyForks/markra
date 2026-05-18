@@ -53,16 +53,23 @@ export async function runInlineAiAgent({
   });
   let finalContent = "";
   let finishReason: string | undefined;
+  let providerErrorMessage = "";
 
   agent.subscribe((event) => {
     onEvent?.(event);
     if (event.type !== "message_end" || event.message.role !== "assistant") return;
 
     finalContent = assistantTextContent(event.message);
+    if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim()) {
+      providerErrorMessage = event.message.errorMessage.trim();
+    }
     finishReason = event.message.stopReason;
   });
 
   await agent.prompt(userPrompt);
+  if (providerErrorMessage) {
+    throw new Error(providerErrorMessage);
+  }
 
   return {
     content: normalizeInlineAiReplacement(finalContent, {

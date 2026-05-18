@@ -1,7 +1,8 @@
 import type { AiProviderConfig } from "@markra/providers";
 import { isRecord } from "@markra/shared";
 import {
-  getChatAdapter
+  getChatAdapter,
+  getChatAdapterForProvider
 } from "./chat-adapters";
 import type { ChatMessage, ChatResponse, ChatToolCallDelta } from "./chat/types";
 
@@ -28,12 +29,14 @@ export type ChatCompletionStreamTransport = (
 ) => Promise<NativeAiStreamResponse>;
 
 export type ChatCompletionStreamOptions = {
+  fallbackTransport?: ChatCompletionTransport;
   onDelta?: (delta: string) => unknown;
   onThinkingDelta?: (delta: string) => unknown;
   onToolCallDelta?: (delta: ChatToolCallDelta) => unknown;
   streamTransport?: ChatCompletionStreamTransport;
   thinkingEnabled?: boolean;
   tools?: import("@mariozechner/pi-ai").Tool[];
+  useVercelAiSdk?: boolean;
   webSearchEnabled?: boolean;
 };
 
@@ -43,7 +46,7 @@ export async function chatCompletion(
   messages: ChatMessage[],
   transport: ChatCompletionTransport = missingChatCompletionTransport
 ): Promise<ChatResponse> {
-  const adapter = getChatAdapter(provider.type);
+  const adapter = getChatAdapterForProvider(provider);
   const request = adapter.buildRequest(provider, model, messages);
   const response = await transport({
     body: JSON.stringify(request.body),
@@ -54,6 +57,10 @@ export async function chatCompletion(
   if (response.status < 200 || response.status >= 300) {
     throw new Error(readResponseError(response));
   }
+  const providerError = readProviderErrorMessage(response.body);
+  if (providerError) {
+    throw new Error(providerError);
+  }
 
   return adapter.parseResponse(response.body);
 }
@@ -63,22 +70,36 @@ export async function chatCompletionStream(
   model: string,
   messages: ChatMessage[],
   {
+    fallbackTransport,
     onDelta,
     onThinkingDelta,
     onToolCallDelta,
     streamTransport = missingChatCompletionStreamTransport,
     thinkingEnabled,
     tools,
+    useVercelAiSdk,
     webSearchEnabled
   }: ChatCompletionStreamOptions = {}
 ): Promise<ChatResponse> {
-  const adapter = getChatAdapter(provider.type);
-  const request = adapter.buildRequest(provider, model, messages, { stream: true, thinkingEnabled, tools, webSearchEnabled });
+  const adapter = getChatAdapterForProvider(provider);
+  let streamRequest: NativeAiChatRequest | undefined;
+  const buildStreamRequest = () => {
+    if (streamRequest) return streamRequest;
+    const request = adapter.buildRequest(provider, model, messages, { stream: true, thinkingEnabled, tools, webSearchEnabled });
+    streamRequest = {
+      body: JSON.stringify(request.body),
+      headers: request.headers,
+      url: request.url
+    };
+
+    return streamRequest;
+  };
   let content = "";
   let finishReason: string | undefined;
   const toolCalls = new Map<number, { argumentsText: string; id: string; name: string }>();
   const parser = createServerSentEventParser();
   const inlineThinkingExtractor = thinkingEnabled ? createInlineThinkingExtractor() : null;
+  let streamErrorMessage: string | undefined;
   const emitContentDelta = (delta: string) => {
     content += delta;
     onDelta?.(delta);
@@ -97,6 +118,12 @@ export async function chatCompletionStream(
     if (extracted.contentDelta) emitContentDelta(extracted.contentDelta);
   };
   const processStreamEvent = (event: unknown) => {
+    const providerError = readProviderErrorMessage(event);
+    if (providerError) {
+      streamErrorMessage = providerError;
+      return;
+    }
+
     const parsed = adapter.parseStreamEvent(event);
     if (parsed.done) return;
 
@@ -135,30 +162,7 @@ export async function chatCompletionStream(
       });
     }
   };
-  const response = await streamTransport(
-    {
-      body: JSON.stringify(request.body),
-      headers: request.headers,
-      url: request.url
-    },
-    (chunk) => {
-      parser.push(chunk).forEach(processStreamEvent);
-    }
-  );
-
-  parser.finish().forEach(processStreamEvent);
-  const finalInlineThinkingDelta = inlineThinkingExtractor?.finish();
-  if (finalInlineThinkingDelta?.thinkingDelta) emitThinkingDelta(finalInlineThinkingDelta.thinkingDelta);
-  if (finalInlineThinkingDelta?.contentDelta) emitContentDelta(finalInlineThinkingDelta.contentDelta);
-
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(readResponseError({ body: response.body ?? null, status: response.status }));
-  }
-  if ((!content || !finishReason) && response.body !== undefined) {
-    applyParsedFallbackResponse(adapter.parseResponse(response.body));
-  }
-
-  return {
+  const buildResponse = (): ChatResponse => ({
     content,
     finishReason,
     ...(toolCalls.size > 0
@@ -170,7 +174,139 @@ export async function chatCompletionStream(
           }))
         }
       : {})
+  });
+  const flushInlineThinking = () => {
+    const finalInlineThinkingDelta = inlineThinkingExtractor?.finish();
+    if (finalInlineThinkingDelta?.thinkingDelta) emitThinkingDelta(finalInlineThinkingDelta.thinkingDelta);
+    if (finalInlineThinkingDelta?.contentDelta) emitContentDelta(finalInlineThinkingDelta.contentDelta);
   };
+  const canFallbackToNonStream = () => fallbackTransport !== undefined && !content;
+  const applyParsedFallback = (parsed: ChatResponse) => {
+    toolCalls.clear();
+    applyParsedFallbackResponse(parsed);
+    flushInlineThinking();
+
+    return buildResponse();
+  };
+  const runCompatibleChatFallback = async () => {
+    if (!fallbackTransport) throw new Error("AI chat fallback transport is not configured.");
+    const compatibleAdapter = getChatAdapter("openai-compatible");
+    const compatibleRequest = compatibleAdapter.buildRequest(provider, model, messages, { thinkingEnabled, tools });
+    const compatibleResponse = await fallbackTransport({
+      body: JSON.stringify(compatibleRequest.body),
+      headers: compatibleRequest.headers,
+      url: compatibleRequest.url
+    });
+
+    if (compatibleResponse.status < 200 || compatibleResponse.status >= 300) {
+      throw new Error(readResponseError(compatibleResponse));
+    }
+    const compatibleProviderError = readProviderErrorMessage(compatibleResponse.body);
+    if (compatibleProviderError) {
+      throw new Error(compatibleProviderError);
+    }
+
+    return applyParsedFallback(compatibleAdapter.parseResponse(compatibleResponse.body));
+  };
+  const runNonStreamFallback = async () => {
+    if (!fallbackTransport) throw new Error("AI chat fallback transport is not configured.");
+    const fallbackRequest = adapter.buildRequest(provider, model, messages, { thinkingEnabled, tools, webSearchEnabled });
+    const fallbackResponse = await fallbackTransport({
+      body: JSON.stringify(fallbackRequest.body),
+      headers: fallbackRequest.headers,
+      url: fallbackRequest.url
+    });
+
+    if (fallbackResponse.status < 200 || fallbackResponse.status >= 300) {
+      if (provider.apiStyle === "openai-responses") return runCompatibleChatFallback();
+      throw new Error(readResponseError(fallbackResponse));
+    }
+    const fallbackProviderError = readProviderErrorMessage(fallbackResponse.body);
+    if (fallbackProviderError) {
+      if (provider.apiStyle === "openai-responses") return runCompatibleChatFallback();
+      throw new Error(fallbackProviderError);
+    }
+
+    return applyParsedFallback(adapter.parseResponse(fallbackResponse.body));
+  };
+  if (useVercelAiSdk === true) {
+    const {
+      canUseVercelAiSdkChatCompletion,
+      chatCompletionStreamWithVercelAiSdk
+    } = await loadVercelAiSdkChatCompletion();
+
+    if (canUseVercelAiSdkChatCompletion({
+      fallbackTransport,
+      messages,
+      model,
+      provider,
+      streamTransport,
+      thinkingEnabled,
+      tools,
+      useVercelAiSdk,
+      webSearchEnabled
+    })) {
+      let sdkContentEmitted = false;
+      try {
+        return await chatCompletionStreamWithVercelAiSdk({
+          fallbackTransport,
+          messages,
+          model,
+          onDelta: (delta) => {
+            sdkContentEmitted = true;
+            onDelta?.(delta);
+          },
+          onThinkingDelta,
+          onToolCallDelta,
+          provider,
+          streamTransport,
+          thinkingEnabled,
+          tools,
+          webSearchEnabled
+        });
+      } catch (error) {
+        if (sdkContentEmitted) throw error;
+        if (canFallbackToNonStream()) return runNonStreamFallback();
+      }
+    }
+  }
+  let response: NativeAiStreamResponse;
+  try {
+    response = await streamTransport(buildStreamRequest(), (chunk) => {
+      parser.push(chunk).forEach(processStreamEvent);
+    });
+  } catch (error) {
+    if (canFallbackToNonStream()) return runNonStreamFallback();
+    throw error;
+  }
+
+  try {
+    parser.finish().forEach(processStreamEvent);
+  } catch (error) {
+    if (canFallbackToNonStream()) return runNonStreamFallback();
+    throw error;
+  }
+  flushInlineThinking();
+
+  if (response.status < 200 || response.status >= 300) {
+    if (canFallbackToNonStream()) return runNonStreamFallback();
+    throw new Error(readResponseError({ body: response.body ?? null, status: response.status }));
+  }
+  const providerError = streamErrorMessage ?? (response.body === undefined ? undefined : readProviderErrorMessage(response.body));
+  if (providerError) {
+    if (canFallbackToNonStream()) return runNonStreamFallback();
+    throw new Error(providerError);
+  }
+  if ((!content || !finishReason) && response.body !== undefined) {
+    applyParsedFallbackResponse(adapter.parseResponse(response.body));
+  }
+  if (!content && toolCalls.size === 0 && canFallbackToNonStream()) return runNonStreamFallback();
+
+  return buildResponse();
+}
+
+function loadVercelAiSdkChatCompletion() {
+  return import("./sdk/chat-completion");
 }
 
 function missingChatCompletionTransport(): never {
@@ -184,17 +320,25 @@ function missingChatCompletionStreamTransport(): never {
 function readResponseError(response: NativeAiHttpResponse) {
   if (isRecord(response.body)) {
     if (typeof response.body.message === "string") return response.body.message;
-    if (isRecord(response.body.error) && typeof response.body.error.message === "string") {
-      if (typeof response.body.error.param === "string" && response.body.error.param.trim()) {
-        return `${response.body.error.message}: ${response.body.error.param}`;
-      }
-
-      return response.body.error.message;
-    }
-    if (typeof response.body.error === "string") return response.body.error;
+    const providerError = readProviderErrorMessage(response.body);
+    if (providerError) return providerError;
   }
 
   return `Request failed with HTTP ${response.status}.`;
+}
+
+function readProviderErrorMessage(body: unknown) {
+  if (!isRecord(body)) return undefined;
+  if (isRecord(body.error) && typeof body.error.message === "string") {
+    if (typeof body.error.param === "string" && body.error.param.trim()) {
+      return `${body.error.message}: ${body.error.param}`;
+    }
+
+    return body.error.message;
+  }
+  if (typeof body.error === "string") return body.error;
+
+  return undefined;
 }
 
 function createServerSentEventParser() {

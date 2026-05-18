@@ -163,6 +163,15 @@ describe("AI provider requests", () => {
       headers: {},
       url: "http://localhost:11434/v1/models"
     });
+    expect(buildAiProviderModelsRequest(provider({
+      apiKey: "stale-local-key",
+      apiStyle: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      type: "ollama"
+    }))).toMatchObject({
+      headers: {},
+      url: "http://localhost:11434/v1/models"
+    });
     expect(buildAiProviderModelsRequest(provider({ type: "mistral" }))).toMatchObject({
       headers: expect.objectContaining({ Authorization: "Bearer sk-test" }),
       url: "https://api.mistral.ai/v1/models"

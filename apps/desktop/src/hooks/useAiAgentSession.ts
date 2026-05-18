@@ -63,6 +63,16 @@ type AiAgentSessionContext = {
   workspaceFiles?: AgentWorkspaceFile[];
 };
 
+type RunningAiAgentRequest = {
+  assistantMessageId: number;
+  draft: string;
+  messages: AiAgentPanelMessage[];
+  requestId: number;
+  status: "thinking" | "streaming";
+  thinkingEnabled: boolean;
+  webSearchEnabled: boolean;
+};
+
 export function useAiAgentSession(ctx: AiAgentSessionContext) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<AiAgentPanelMessage[]>([]);
@@ -71,7 +81,9 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming" | "error">("idle");
   const [titleVersion, setTitleVersion] = useState(0);
   const requestIdRef = useRef(0);
-  const assistantMessageIdRef = useRef<number | null>(null);
+  const hydrationRequestIdRef = useRef(0);
+  const activeSessionKeyRef = useRef<string | null>(null);
+  const runningRequestsRef = useRef(new Map<string | null, RunningAiAgentRequest>());
   const hydratedSessionKeyRef = useRef<string | null>(null);
   const didRestorePanelStateRef = useRef(false);
   const persistTimerRef = useRef<number | null>(null);
@@ -86,6 +98,7 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
   const agentModelId = ctx.model ?? null;
   const agentProviderId = ctx.provider?.id ?? null;
 
+  activeSessionKeyRef.current = sessionKey;
   onSessionModelRestoreRef.current = ctx.onSessionModelRestore;
   onSessionRestoreRef.current = ctx.onSessionRestore;
 
@@ -132,44 +145,43 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     };
   }, [sessionKey]);
 
-  const updateAssistantMessage = useCallback((updater: (message: AiAgentPanelMessage) => AiAgentPanelMessage) => {
-    const assistantId = assistantMessageIdRef.current;
-    if (assistantId === null) return;
-
-    setMessages((currentMessages) =>
-      currentMessages.map((message) => (message.id === assistantId ? updater(message) : message))
-    );
-  }, []);
-
   const interrupt = useCallback(() => {
-    requestIdRef.current += 1;
-    updateAssistantMessage((currentMessage) => ({
-      ...currentMessage,
-      activities: cancelAgentProcesses(currentMessage.activities ?? [])
-    }));
-    assistantMessageIdRef.current = null;
+    const runningRequest = runningRequestsRef.current.get(sessionKey);
+    if (runningRequest) {
+      runningRequestsRef.current.delete(sessionKey);
+      setMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === runningRequest.assistantMessageId
+            ? {
+                ...message,
+                activities: cancelAgentProcesses(message.activities ?? [])
+              }
+            : message
+        )
+      );
+    }
     setStatus("idle");
-  }, [updateAssistantMessage]);
+  }, [sessionKey]);
 
   useEffect(() => {
     let active = true;
 
-    requestIdRef.current += 1;
-    const hydrationRequestId = requestIdRef.current;
-    assistantMessageIdRef.current = null;
+    hydrationRequestIdRef.current += 1;
+    const hydrationRequestId = hydrationRequestIdRef.current;
+    const runningRequest = runningRequestsRef.current.get(sessionKey);
     hydratedSessionKeyRef.current = null;
     skipNextPersistRef.current = false;
     sessionTitleSourceRef.current = null;
     titleGenerationSignatureRef.current = null;
-    setStatus("idle");
+    setStatus(runningRequest?.status ?? "idle");
     const shouldRestorePanelState = !didRestorePanelStateRef.current;
 
     if (!sessionKey) {
       const defaultSession = createDefaultAiAgentSessionState();
-      setDraft(defaultSession.draft);
-      setMessages(defaultSession.messages);
-      setThinkingEnabledState(defaultSession.thinkingEnabled);
-      setWebSearchEnabledState(defaultSession.webSearchEnabled);
+      setDraft(runningRequest?.draft ?? defaultSession.draft);
+      setMessages(runningRequest?.messages ?? defaultSession.messages);
+      setThinkingEnabledState(runningRequest?.thinkingEnabled ?? defaultSession.thinkingEnabled);
+      setWebSearchEnabledState(runningRequest?.webSearchEnabled ?? defaultSession.webSearchEnabled);
       hydratedSessionKeyRef.current = null;
       skipNextPersistRef.current = true;
       return () => {
@@ -180,15 +192,17 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     Promise.all([getStoredAiAgentSession(sessionKey), getStoredAiAgentSessionSummary(sessionKey)])
       .then(([storedSession, storedSummary]) => {
         if (!active) return;
-        if (requestIdRef.current !== hydrationRequestId) {
+        if (hydrationRequestIdRef.current !== hydrationRequestId) {
           hydratedSessionKeyRef.current = sessionKey;
           return;
         }
 
-        setDraft(storedSession.draft);
-        setMessages(storedSession.messages);
-        setThinkingEnabledState(storedSession.thinkingEnabled);
-        setWebSearchEnabledState(storedSession.webSearchEnabled);
+        const currentRunningRequest = runningRequestsRef.current.get(sessionKey);
+        setDraft(currentRunningRequest?.draft ?? storedSession.draft);
+        setMessages(currentRunningRequest?.messages ?? storedSession.messages);
+        setThinkingEnabledState(currentRunningRequest?.thinkingEnabled ?? storedSession.thinkingEnabled);
+        setWebSearchEnabledState(currentRunningRequest?.webSearchEnabled ?? storedSession.webSearchEnabled);
+        setStatus(currentRunningRequest?.status ?? "idle");
         onSessionModelRestoreRef.current?.({
           agentModelId: storedSession.agentModelId,
           agentProviderId: storedSession.agentProviderId
@@ -206,16 +220,18 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
       })
       .catch(() => {
         if (!active) return;
-        if (requestIdRef.current !== hydrationRequestId) {
+        if (hydrationRequestIdRef.current !== hydrationRequestId) {
           hydratedSessionKeyRef.current = sessionKey;
           return;
         }
 
         const defaultSession = createDefaultAiAgentSessionState();
-        setDraft(defaultSession.draft);
-        setMessages(defaultSession.messages);
-        setThinkingEnabledState(defaultSession.thinkingEnabled);
-        setWebSearchEnabledState(defaultSession.webSearchEnabled);
+        const currentRunningRequest = runningRequestsRef.current.get(sessionKey);
+        setDraft(currentRunningRequest?.draft ?? defaultSession.draft);
+        setMessages(currentRunningRequest?.messages ?? defaultSession.messages);
+        setThinkingEnabledState(currentRunningRequest?.thinkingEnabled ?? defaultSession.thinkingEnabled);
+        setWebSearchEnabledState(currentRunningRequest?.webSearchEnabled ?? defaultSession.webSearchEnabled);
+        setStatus(currentRunningRequest?.status ?? "idle");
         onSessionModelRestoreRef.current?.({
           agentModelId: defaultSession.agentModelId,
           agentProviderId: defaultSession.agentProviderId
@@ -338,7 +354,7 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     const requestId = requestIdRef.current + 1;
 
     requestIdRef.current = requestId;
-    assistantMessageIdRef.current = null;
+    hydrationRequestIdRef.current += 1;
 
     if (ctx.settingsLoading) {
       setStatus("error");
@@ -385,6 +401,14 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
 
     const userMessageId = Date.now();
     const assistantMessageId = userMessageId + 1;
+    const runSessionKey = sessionKey;
+    const runAgentModelId = agentModelId;
+    const runAgentProviderId = agentProviderId;
+    const runPanelOpen = ctx.panelOpen === true;
+    const runPanelWidth = ctx.panelWidth ?? null;
+    const runThinkingEnabled = thinkingEnabled;
+    const runWebSearchEnabled = webSearchEnabled;
+    const runWorkspaceKey = ctx.workspaceKey ?? null;
     const history: DocumentAiHistoryMessage[] = messages
       .filter((item) => !item.isError)
       .map((item) => ({
@@ -393,15 +417,8 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
         role: item.role,
         text: item.text
       }));
-    assistantMessageIdRef.current = assistantMessageId;
-    setDraft("");
-    setStatus("thinking");
-    let preparedEditorPreview = false;
-    const latestPreparedEditorPreview: { current: { previewId?: string; result: AiDiffResult } | null } = {
-      current: null
-    };
-    setMessages((currentMessages) => [
-      ...currentMessages,
+    const initialMessages: AiAgentPanelMessage[] = [
+      ...messages,
       { id: userMessageId, role: "user", text: prompt },
       {
         activities: createInitialAgentProcesses(message),
@@ -410,14 +427,78 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
         text: "",
         thinking: ""
       }
-    ]);
+    ];
+    const runIsCurrent = () => runningRequestsRef.current.get(runSessionKey)?.requestId === requestId;
+    const updateRunRequest = (updater: (request: RunningAiAgentRequest) => RunningAiAgentRequest) => {
+      const currentRequest = runningRequestsRef.current.get(runSessionKey);
+      if (!currentRequest || currentRequest.requestId !== requestId) return null;
+
+      const nextRequest = updater(currentRequest);
+      runningRequestsRef.current.set(runSessionKey, nextRequest);
+
+      if (activeSessionKeyRef.current === runSessionKey) {
+        setMessages(nextRequest.messages);
+        setStatus(nextRequest.status);
+      }
+
+      return nextRequest;
+    };
+    const updateRunAssistantMessage = (
+      updater: (message: AiAgentPanelMessage) => AiAgentPanelMessage,
+      nextStatus?: RunningAiAgentRequest["status"]
+    ) =>
+      updateRunRequest((currentRequest) => ({
+        ...currentRequest,
+        messages: currentRequest.messages.map((message) =>
+          message.id === currentRequest.assistantMessageId ? updater(message) : message
+        ),
+        status: nextStatus ?? currentRequest.status
+      }));
+    const persistCompletedRun = async (completedRequest: RunningAiAgentRequest) => {
+      if (activeSessionKeyRef.current === runSessionKey) {
+        hydrationRequestIdRef.current += 1;
+      }
+
+      await saveStoredAiAgentSession(runSessionKey, {
+        agentModelId: runAgentModelId,
+        agentProviderId: runAgentProviderId,
+        draft: completedRequest.draft,
+        messages: completedRequest.messages,
+        panelOpen: runPanelOpen,
+        panelWidth: runPanelWidth,
+        thinkingEnabled: runThinkingEnabled,
+        webSearchEnabled: runWebSearchEnabled
+      }, {
+        workspaceKey: runWorkspaceKey
+      }).catch(() => {});
+      setTitleVersion((currentVersion) => currentVersion + 1);
+    };
+
+    runningRequestsRef.current.set(runSessionKey, {
+      assistantMessageId,
+      draft: "",
+      messages: initialMessages,
+      requestId,
+      status: "thinking",
+      thinkingEnabled: runThinkingEnabled,
+      webSearchEnabled: runWebSearchEnabled
+    });
+    setDraft("");
+    setStatus("thinking");
+    let preparedEditorPreview = false;
+    const latestPreparedEditorPreview: { current: { previewId?: string; result: AiDiffResult } | null } = {
+      current: null
+    };
+    setMessages(initialMessages);
 
     try {
       const response = await runDocumentAiAgent({
         complete: (provider, model, messages, completionOptions) =>
           chatCompletionStream(provider, model, messages, {
             ...completionOptions,
-            streamTransport: requestNativeChatStream
+            fallbackTransport: requestNativeChat,
+            streamTransport: requestNativeChatStream,
+            useVercelAiSdk: true
           }),
         documentContent: ctx.getDocumentContent(),
         documentEndPosition: ctx.getDocumentEndPosition?.() ?? 0,
@@ -425,24 +506,26 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
         history,
         model: ctx.model,
         onPreviewResult: (result, previewId) => {
-          if (requestIdRef.current !== requestId) return;
+          if (!runIsCurrent()) return;
 
           const preview = sessionPreviewFromAiResult(result);
           if (preview) {
             preparedEditorPreview = true;
             latestPreparedEditorPreview.current = { previewId, result };
-            updateAssistantMessage((currentMessage) => ({
+            updateRunAssistantMessage((currentMessage) => ({
               ...currentMessage,
               previews: [...(currentMessage.previews ?? []), preview],
               preview
             }));
           }
-          ctx.onAiResult?.(result, previewId);
+          if (activeSessionKeyRef.current === runSessionKey) {
+            ctx.onAiResult?.(result, previewId);
+          }
         },
         onEvent: (event) => {
-          if (requestIdRef.current !== requestId) return;
+          if (!runIsCurrent()) return;
 
-          updateAssistantMessage((currentMessage) => ({
+          updateRunAssistantMessage((currentMessage) => ({
             ...currentMessage,
             activities: applyAgentEventToProcesses(currentMessage.activities ?? [], event, message)
           }));
@@ -451,28 +534,26 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
             const completedThinking = assistantThinkingFromAgentMessageContent(event.message.content);
             if (!completedThinking) return;
 
-            updateAssistantMessage((currentMessage) => ({
+            updateRunAssistantMessage((currentMessage) => ({
               ...currentMessage,
               thinkingTurns: appendThinkingTurn(currentMessage.thinkingTurns, completedThinking)
             }));
           }
         },
         onTextDelta: (text) => {
-          if (requestIdRef.current !== requestId) return;
-          setStatus("streaming");
-          updateAssistantMessage((currentMessage) => ({
+          if (!runIsCurrent()) return;
+          updateRunAssistantMessage((currentMessage) => ({
             ...currentMessage,
             text
-          }));
+          }), "streaming");
         },
         onThinkingDelta: (thinking) => {
-          if (requestIdRef.current !== requestId) return;
+          if (!runIsCurrent()) return;
 
-          setStatus("thinking");
-          updateAssistantMessage((currentMessage) => ({
+          updateRunAssistantMessage((currentMessage) => ({
             ...currentMessage,
             thinking
-          }));
+          }), "thinking");
         },
         prompt,
         provider: ctx.provider,
@@ -489,17 +570,21 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
         workspaceFiles: ctx.workspaceFiles ?? []
       });
 
-      if (requestIdRef.current !== requestId) return;
+      if (!runIsCurrent()) return;
 
       if (!response.content.trim()) {
         if (preparedEditorPreview || response.preparedPreview) {
-          updateAssistantMessage((currentMessage) => ({
+          const completedRequest = updateRunAssistantMessage((currentMessage) => ({
             ...currentMessage,
             activities: finalizeAgentProcesses(currentMessage.activities ?? [], message, true),
             text: message("app.aiAgentPreviewReady")
           }));
-          setStatus("idle");
-          if (latestPreparedEditorPreview.current) {
+          if (!completedRequest) return;
+
+          runningRequestsRef.current.delete(runSessionKey);
+          if (activeSessionKeyRef.current === runSessionKey) setStatus("idle");
+          await persistCompletedRun(completedRequest);
+          if (latestPreparedEditorPreview.current && activeSessionKeyRef.current === runSessionKey) {
             ctx.onAiPreviewReady?.(
               latestPreparedEditorPreview.current.result,
               latestPreparedEditorPreview.current.previewId
@@ -508,42 +593,52 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
           return;
         }
 
-        updateAssistantMessage((currentMessage) => ({
+        const failedRequest = updateRunAssistantMessage((currentMessage) => ({
           ...currentMessage,
           activities: failAgentProcesses(currentMessage.activities ?? []),
           isError: true,
           text: message(emptyResponseMessageKey(response.stopReasonCode))
         }));
-        setStatus("error");
+        if (!failedRequest) return;
+
+        runningRequestsRef.current.delete(runSessionKey);
+        if (activeSessionKeyRef.current === runSessionKey) setStatus("error");
+        await persistCompletedRun(failedRequest);
         return;
       }
 
-      updateAssistantMessage((currentMessage) => ({
+      const completedRequest = updateRunAssistantMessage((currentMessage) => ({
         ...currentMessage,
         activities: finalizeAgentProcesses(currentMessage.activities ?? [], message, response.content.trim().length > 0),
         text: response.content
       }));
-      setStatus("idle");
-      if (latestPreparedEditorPreview.current) {
+      if (!completedRequest) return;
+
+      runningRequestsRef.current.delete(runSessionKey);
+      if (activeSessionKeyRef.current === runSessionKey) setStatus("idle");
+      await persistCompletedRun(completedRequest);
+      if (latestPreparedEditorPreview.current && activeSessionKeyRef.current === runSessionKey) {
         ctx.onAiPreviewReady?.(
           latestPreparedEditorPreview.current.result,
           latestPreparedEditorPreview.current.previewId
         );
       }
     } catch (error) {
-      if (requestIdRef.current !== requestId) return;
+      if (!runIsCurrent()) return;
 
-      updateAssistantMessage((currentMessage) => ({
+      const failedRequest = updateRunAssistantMessage((currentMessage) => ({
         ...currentMessage,
         activities: failAgentProcesses(currentMessage.activities ?? []),
         isError: true,
         text: error instanceof Error ? error.message : message("app.aiRequestFailed")
       }));
-      setStatus("error");
-    } finally {
-      if (requestIdRef.current === requestId) assistantMessageIdRef.current = null;
+      if (!failedRequest) return;
+
+      runningRequestsRef.current.delete(runSessionKey);
+      if (activeSessionKeyRef.current === runSessionKey) setStatus("error");
+      await persistCompletedRun(failedRequest);
     }
-  }, [ctx, draft, messages, thinkingEnabled, updateAssistantMessage, webSearchEnabled]);
+  }, [agentModelId, agentProviderId, ctx, draft, messages, sessionKey, thinkingEnabled, webSearchEnabled]);
 
   return {
     draft,

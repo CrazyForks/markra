@@ -402,9 +402,15 @@ export function resolveInsertionPosition(
     };
   }
 
+  if (args.placement === "cursor") {
+    return {
+      position: context.documentEndPosition
+    };
+  }
+
   return {
     error: toolErrorResult(
-      "Cannot insert because there is no active editor context. Call locate_markdown_region or get_available_anchors first and then insert via anchorId."
+      "Cannot insert because there is no active editor selection for that placement. Call locate_markdown_region or get_available_anchors first and then insert via anchorId."
     )
   };
 }

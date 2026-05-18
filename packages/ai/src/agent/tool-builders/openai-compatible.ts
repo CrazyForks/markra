@@ -12,11 +12,11 @@ export function buildOpenAiCompatibleFunctionTools(tools: Tool[] | undefined) {
 }
 
 export function buildResponsesStyleTools(
-  nativeWebSearchToolType: "openrouter:web_search" | "web_search",
+  nativeWebSearchToolType: "openrouter:web_search" | "web_search" | undefined,
   tools: Tool[] | undefined
 ) {
   return [
-    { type: nativeWebSearchToolType },
+    ...(nativeWebSearchToolType ? [{ type: nativeWebSearchToolType }] : []),
     ...(tools ?? []).map((tool) => ({
       description: tool.description,
       name: tool.name,

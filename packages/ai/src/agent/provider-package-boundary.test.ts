@@ -1,6 +1,6 @@
 import { createDefaultAiSettings } from "@markra/providers";
 
-import { getChatAdapter } from "./chat-adapters";
+import { getChatAdapterForProvider } from "./chat-adapters";
 
 describe("provider package boundary", () => {
   it("builds chat requests from provider settings owned by @markra/providers", () => {
@@ -8,13 +8,13 @@ describe("provider package boundary", () => {
     if (!provider) throw new Error("OpenAI provider template is missing.");
     if (!provider.defaultModelId) throw new Error("OpenAI provider default model is missing.");
 
-    const request = getChatAdapter(provider.type).buildRequest(provider, provider.defaultModelId, [
+    const request = getChatAdapterForProvider(provider).buildRequest(provider, provider.defaultModelId, [
       { content: "Say ok.", role: "user" }
     ]);
 
-    expect(request.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(request.url).toBe("https://api.openai.com/v1/responses");
     expect(request.body).toMatchObject({
-      messages: [{ content: "Say ok.", role: "user" }],
+      input: [{ content: [{ text: "Say ok.", type: "input_text" }], role: "user", type: "message" }],
       model: provider.defaultModelId
     });
   });

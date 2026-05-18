@@ -17,6 +17,20 @@ function provider(overrides: Partial<AiProviderConfig> = {}): AiProviderConfig {
 }
 
 describe("document AI agent", () => {
+  it("surfaces provider errors from the tool-calling runtime", async () => {
+    const complete = vi.fn().mockRejectedValue(new Error("Concurrency limit exceeded for user, please retry later"));
+
+    await expect(runDocumentAiAgent({
+      complete,
+      documentContent: "# Draft",
+      documentPath: "/vault/README.md",
+      model: "gpt-5.5",
+      prompt: "Summarize this document.",
+      provider: provider(),
+      workspaceFiles: []
+    })).rejects.toThrow("Concurrency limit exceeded for user, please retry later");
+  });
+
   it("asks the tool-calling agent to answer in the user's language", async () => {
     const complete = vi.fn().mockImplementationOnce(async (_provider, _model, messages: ChatMessage[]) => {
       expect(messages[0]?.content).toContain("Reply in the user's language");

@@ -4,9 +4,11 @@ import {
   buildOpenAiCompatibleRequestParts,
   buildResponsesStyleRequestOptions,
   getNativeWebSearchKind,
+  providerRequiresApiKey,
   readAiProviderCustomHeaders,
   type AiProviderApiStyle,
-  type AiProviderConfig
+  type AiProviderConfig,
+  type AiProviderRequestStyle
 } from "@markra/providers";
 import { isRecord, joinApiUrl } from "@markra/shared";
 import type {
@@ -38,10 +40,18 @@ const defaultChatBaseUrlByApiStyle: Partial<Record<AiProviderApiStyle, string>> 
   openai: "https://api.openai.com/v1"
 };
 
+const defaultChatBaseUrlByRequestStyle: Partial<Record<AiProviderRequestStyle, string>> = {
+  anthropic: "https://api.anthropic.com/v1",
+  google: "https://generativelanguage.googleapis.com/v1beta",
+  "openai-compatible": "https://api.openai.com/v1",
+  "openai-responses": "https://api.openai.com/v1"
+};
+
 const openAiCompatibleAdapter: ChatAdapter = {
   buildRequest(config, model, messages, options = {}) {
     const baseUrl = config.baseUrl?.trim() || defaultChatBaseUrlByApiStyle[config.type] || "";
     if (!baseUrl) throw new Error("API URL is required.");
+    const apiKey = readProviderApiKey(config);
     const nativeWebSearchKind = options.webSearchEnabled === true ? getNativeWebSearchKind(config, model) : null;
     if (
       nativeWebSearchKind === "dashscope-responses-tool" ||
@@ -51,7 +61,7 @@ const openAiCompatibleAdapter: ChatAdapter = {
     ) {
       return buildResponsesStyleRequest({
         authHeaders: {
-          ...(config.apiKey?.trim() ? { Authorization: `Bearer ${config.apiKey.trim()}` } : {}),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           "content-type": "application/json",
           ...readAiProviderCustomHeaders(config)
         },
@@ -78,7 +88,7 @@ const openAiCompatibleAdapter: ChatAdapter = {
     return {
       body,
       headers: {
-        ...(config.apiKey?.trim() ? { Authorization: `Bearer ${config.apiKey.trim()}` } : {}),
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         "content-type": "application/json",
         ...readAiProviderCustomHeaders(config)
       },
@@ -107,6 +117,32 @@ const openAiCompatibleAdapter: ChatAdapter = {
     return parseOpenAiCompatibleStreamEvent(body);
   }
 };
+
+const openAiResponsesAdapter: ChatAdapter = {
+  buildRequest(config, model, messages, options = {}) {
+    const baseUrl = config.baseUrl?.trim() || defaultChatBaseUrlByRequestStyle["openai-responses"] || "";
+    if (!baseUrl) throw new Error("API URL is required.");
+    const apiKey = readProviderApiKey(config);
+
+    return buildResponsesStyleRequest({
+      authHeaders: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        "content-type": "application/json",
+        ...readAiProviderCustomHeaders(config)
+      },
+      baseUrl,
+      config,
+      messages,
+      model,
+      nativeWebSearchToolType: options.webSearchEnabled === true ? "web_search" : undefined,
+      options,
+      responsePath: "/responses"
+    });
+  },
+  parseResponse: openAiCompatibleAdapter.parseResponse,
+  parseStreamEvent: openAiCompatibleAdapter.parseStreamEvent
+};
+
 function buildResponsesStyleRequest({
   authHeaders,
   baseUrl,
@@ -122,12 +158,12 @@ function buildResponsesStyleRequest({
   config: AiProviderConfig;
   messages: ChatMessage[];
   model: string;
-  nativeWebSearchToolType: "openrouter:web_search" | "web_search";
+  nativeWebSearchToolType?: "openrouter:web_search" | "web_search";
   options: ChatRequestOptions;
   responsePath: string;
 }): ChatRequest {
   const body = buildResponsesRequestBody({
-    extraBody: buildResponsesStyleRequestOptions(config, model, nativeWebSearchToolType, options),
+    extraBody: buildResponsesStyleRequestOptions(config, model, nativeWebSearchToolType ?? "web_search", options),
     messages,
     model,
     nativeWebSearchToolType,
@@ -145,6 +181,7 @@ function buildResponsesStyleRequest({
 const deepseekAdapter: ChatAdapter = {
   buildRequest(config, model, messages, options = {}) {
     const baseUrl = config.baseUrl?.trim() || defaultChatBaseUrlByApiStyle.deepseek!;
+    const apiKey = readProviderApiKey(config);
     const body = buildChatCompletionsRequestBody({
       extraBody: buildDeepSeekThinkingRequestOptions(options),
       messages: messages.map((message) => deepseekCompatibleMessage(message, options.thinkingEnabled)),
@@ -156,7 +193,7 @@ const deepseekAdapter: ChatAdapter = {
     return {
       body,
       headers: {
-        ...(config.apiKey?.trim() ? { Authorization: `Bearer ${config.apiKey.trim()}` } : {}),
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         "content-type": "application/json",
         ...readAiProviderCustomHeaders(config)
       },
@@ -204,7 +241,7 @@ const anthropicAdapter: ChatAdapter = {
       headers: {
         "anthropic-version": anthropicVersion,
         "content-type": "application/json",
-        "x-api-key": config.apiKey?.trim() ?? "",
+        "x-api-key": readProviderApiKey(config),
         ...readAiProviderCustomHeaders(config)
       },
       url: joinApiUrl(config.baseUrl?.trim() || defaultChatBaseUrlByApiStyle.anthropic!, "/messages")
@@ -286,7 +323,7 @@ const azureAdapter: ChatAdapter = {
     if (options.webSearchEnabled === true && getNativeWebSearchKind(config, model) === "azure-openai-responses") {
       return buildResponsesStyleRequest({
         authHeaders: {
-          "api-key": config.apiKey?.trim() ?? "",
+          "api-key": readProviderApiKey(config),
           "content-type": "application/json",
           ...readAiProviderCustomHeaders(config)
         },
@@ -310,7 +347,7 @@ const azureAdapter: ChatAdapter = {
     return {
       body,
       headers: {
-        "api-key": config.apiKey?.trim() ?? "",
+        "api-key": readProviderApiKey(config),
         "content-type": "application/json",
         ...readAiProviderCustomHeaders(config)
       },
@@ -331,7 +368,7 @@ const googleAdapter: ChatAdapter = {
         role: message.role === "assistant" ? "model" : "user"
     }));
     const baseUrl = config.baseUrl?.trim() || defaultChatBaseUrlByApiStyle.google!;
-    const key = encodeURIComponent(config.apiKey?.trim() ?? "");
+    const key = encodeURIComponent(readProviderApiKey(config));
     const tools = buildGoogleTools(config, model, options.webSearchEnabled);
     const body = mergeRequestBody(
       {
@@ -426,8 +463,25 @@ const adapterByApiStyle: Record<AiProviderApiStyle, ChatAdapter> = {
   xai: openAiCompatibleAdapter
 };
 
-export function getChatAdapter(apiStyle: AiProviderApiStyle): ChatAdapter {
-  return adapterByApiStyle[apiStyle] ?? openAiCompatibleAdapter;
+const adapterByRequestStyle: Record<AiProviderRequestStyle, ChatAdapter> = {
+  anthropic: anthropicAdapter,
+  google: googleAdapter,
+  "openai-compatible": openAiCompatibleAdapter,
+  "openai-responses": openAiResponsesAdapter
+};
+
+export function getChatAdapter(apiStyle: AiProviderApiStyle | AiProviderRequestStyle): ChatAdapter {
+  if (isRequestStyleAdapterKey(apiStyle)) return adapterByRequestStyle[apiStyle];
+
+  return adapterByApiStyle[apiStyle as AiProviderApiStyle] ?? openAiCompatibleAdapter;
+}
+
+export function getChatAdapterForProvider(provider: AiProviderConfig): ChatAdapter {
+  return provider.apiStyle ? getChatAdapter(provider.apiStyle) : getChatAdapter(provider.type);
+}
+
+function isRequestStyleAdapterKey(apiStyle: AiProviderApiStyle | AiProviderRequestStyle): apiStyle is AiProviderRequestStyle {
+  return Object.hasOwn(adapterByRequestStyle, apiStyle);
 }
 
 function openAiCompatibleMessage(message: ChatMessage) {
@@ -773,4 +827,8 @@ function parseToolArguments(rawArguments: string) {
   } catch {
     return {};
   }
+}
+
+function readProviderApiKey(config: AiProviderConfig) {
+  return providerRequiresApiKey(config) ? config.apiKey?.trim() ?? "" : "";
 }

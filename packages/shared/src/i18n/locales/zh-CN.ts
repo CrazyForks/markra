@@ -204,7 +204,7 @@ const messages: LocaleMessages = {
   "settings.ai.configured": "已配置",
   "settings.ai.notConfigured": "未配置",
   "settings.ai.providerLogo": "标志",
-  "settings.ai.apiStyleOpenAiCompatible": "OpenAI 兼容",
+  "settings.ai.apiStyleOpenAiCompatible": "OpenAI compatible",
   "settings.ai.customHeaders": "自定义 Header",
   "settings.ai.customHeadersDescription": "会添加到模型列表和聊天请求。请输入 JSON 对象。",
   "settings.ai.customHeadersEdit": "编辑自定义 Header",

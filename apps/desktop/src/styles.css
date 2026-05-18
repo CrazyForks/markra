@@ -172,6 +172,7 @@
     --accent: #1a1c1e;
     --accent-soft: rgba(26, 28, 30, 0.1);
     --accent-hover: #0f1115;
+    --danger: #b42318;
     --link-color: #2f56c6;
     --scrollbar-track: transparent;
     --scrollbar-thumb: color-mix(in srgb, var(--text-secondary) 44%, transparent);
@@ -222,6 +223,7 @@
     --accent: #f4f4f5;
     --accent-soft: rgba(244, 244, 245, 0.14);
     --accent-hover: #fafafa;
+    --danger: #ff8a80;
     --link-color: #b7c5ff;
 
     --ai-command-shadow:
@@ -2368,6 +2370,27 @@
     @apply text-[13px] leading-5;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .ai-chat-markdown-danger {
+    --editor-text-primary: var(--danger);
+    --editor-text-heading: var(--danger);
+    --editor-link-color: var(--danger);
+  }
+
+  .ai-chat-markdown-thinking {
+    --editor-text-primary: color-mix(in srgb, var(--text-secondary) 72%, transparent);
+    --editor-text-heading: color-mix(in srgb, var(--text-secondary) 78%, transparent);
+    --editor-text-secondary: color-mix(in srgb, var(--text-secondary) 58%, transparent);
+    --editor-code-text: color-mix(in srgb, var(--text-secondary) 82%, transparent);
+    --editor-inline-code-text: color-mix(in srgb, var(--text-secondary) 82%, transparent);
+    --editor-link-color: color-mix(in srgb, var(--link-color) 48%, var(--text-secondary));
+  }
+
+  .ai-chat-markdown-thinking strong,
+  .ai-chat-markdown-thinking b,
+  .ai-chat-markdown-thinking .markra-live-mark-strong {
+    color: color-mix(in srgb, var(--text-secondary) 78%, transparent);
   }
 
   .ai-chat-markdown h1,

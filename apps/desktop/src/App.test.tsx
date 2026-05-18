@@ -733,7 +733,7 @@ describe("Markra workspace", () => {
     expect(screen.getByLabelText("Search providers")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Add provider" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Provider name")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("API style")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("API style")).toHaveValue("openai-responses");
     expect(screen.getByLabelText("API key")).toHaveValue("");
     expect(screen.getByLabelText("API URL")).toHaveValue("https://api.openai.com/v1");
 
@@ -843,10 +843,10 @@ describe("Markra workspace", () => {
     expect(screen.getByRole("button", { name: "Delete provider" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("API style"), {
-      target: { value: "mistral" }
+      target: { value: "anthropic" }
     });
 
-    expect(screen.getByLabelText("API URL")).toHaveValue("https://api.mistral.ai/v1");
+    expect(screen.getByLabelText("API URL")).toHaveValue("https://api.anthropic.com/v1");
 
     fireEvent.click(screen.getByRole("button", { name: "Delete provider" }));
 

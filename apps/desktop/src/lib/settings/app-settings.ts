@@ -436,15 +436,17 @@ export async function listStoredAiAgentSessions(
 export async function initializeStoredAiAgentSession(
   sessionId: string,
   workspaceKey: string | null,
-  options: Partial<Pick<StoredAiAgentSessionState, "agentModelId" | "agentProviderId">> = {}
+  options: Partial<
+    Pick<StoredAiAgentSessionState, "agentModelId" | "agentProviderId" | "thinkingEnabled" | "webSearchEnabled">
+  > = {}
 ) {
   const preferences = await getStoredAiAgentPreferences();
 
   await saveStoredAiAgentSession(sessionId, createDefaultAiAgentSessionState({
     agentModelId: options.agentModelId,
     agentProviderId: options.agentProviderId,
-    thinkingEnabled: preferences.thinkingEnabled,
-    webSearchEnabled: preferences.webSearchEnabled
+    thinkingEnabled: options.thinkingEnabled ?? preferences.thinkingEnabled,
+    webSearchEnabled: options.webSearchEnabled ?? preferences.webSearchEnabled
   }), { workspaceKey });
 }
 

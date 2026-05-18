@@ -7,7 +7,7 @@ type ResponsesRequestBodyParams = {
   extraBody?: Record<string, unknown>;
   messages: ChatMessage[];
   model: string;
-  nativeWebSearchToolType: "openrouter:web_search" | "web_search";
+  nativeWebSearchToolType?: "openrouter:web_search" | "web_search";
   stream?: boolean;
   tools?: Tool[];
 };
@@ -16,6 +16,10 @@ type ResponsesContentPart =
   | {
       text: string;
       type: "input_text";
+    }
+  | {
+      text: string;
+      type: "output_text";
     }
   | {
       image_url: string;
@@ -30,6 +34,7 @@ type ResponsesInputItem =
   | {
       content: ResponsesMessageContent;
       role: ChatMessage["role"];
+      type: "message";
     }
   | {
       arguments: string;
@@ -98,7 +103,8 @@ function buildResponsesInputMessage(message: ChatMessage): ResponsesInputItem[] 
         ? [
             {
               content: buildResponsesMessageContent(message),
-              role: message.role
+              role: message.role,
+              type: "message" as const
             }
           ]
         : []),
@@ -115,13 +121,16 @@ function buildResponsesInputMessage(message: ChatMessage): ResponsesInputItem[] 
   return [
     {
       content: buildResponsesMessageContent(message),
-      role: message.role
+      role: message.role,
+      type: "message"
     }
   ];
 }
 
 function buildResponsesMessageContent(message: ChatMessage): ResponsesMessageContent {
-  if (message.role === "assistant" && !message.images?.length) return message.content;
+  if (message.role === "assistant" && !message.images?.length) {
+    return [{ text: message.content, type: "output_text" as const }];
+  }
 
   return [
     { text: message.content, type: "input_text" as const },

@@ -7,6 +7,8 @@ import {
   staleDefaultModelIdsByProviderId
 } from "./catalog";
 import { enrichAiProviderModelCapabilities, readModelCapabilities } from "./capabilities";
+import { providerRequiresApiKey } from "./auth";
+import { editableRequestStylesForProvider, isAiProviderRequestStyle, requestStyleForProviderType } from "./request-styles";
 import {
   isAiProviderApiStyle,
   type AiProviderConfig,
@@ -42,6 +44,7 @@ export function createCustomAiProvider(index: number): AiProviderConfig {
     id: `custom-provider-${providerNumber}`,
     models: [{ capabilities: ["text"], enabled: true, id: "default", name: "Default model" }],
     name: "Custom Provider",
+    apiStyle: "openai-compatible",
     type: "openai-compatible"
   };
 }
@@ -89,10 +92,18 @@ function normalizeProvider(value: unknown): AiProviderConfig | null {
   if (legacyBuiltInProviderIds.has(providerId)) return null;
 
   const type = isAiProviderApiStyle(value.type) ? value.type : "openai-compatible";
+  const defaultProvider = defaultProviderTemplateForProviderId(providerId);
+  const fallbackApiStyle = defaultProvider?.apiStyle ?? requestStyleForProviderType(type);
+  const editableApiStyles = editableRequestStylesForProvider({ id: providerId, type });
+  const storedApiStyle = isAiProviderRequestStyle(value.apiStyle) ? value.apiStyle : undefined;
+  const canUseStoredApiStyle =
+    editableApiStyles.length > 0 &&
+    storedApiStyle !== undefined &&
+    editableApiStyles.includes(storedApiStyle);
+  const apiStyle = canUseStoredApiStyle ? storedApiStyle : fallbackApiStyle;
   const normalizedStoredModels = Array.isArray(value.models)
     ? value.models.map(normalizeModel).filter((model): model is AiProviderModel => Boolean(model))
     : [];
-  const defaultProvider = defaultProviderTemplateForProviderId(providerId);
   const storedModels = defaultProvider
     ? normalizedStoredModels.map((model) => enrichAiProviderModelCapabilities(providerId, model))
     : normalizedStoredModels;
@@ -114,7 +125,10 @@ function normalizeProvider(value: unknown): AiProviderConfig | null {
       : models[0]?.id;
 
   return {
-    apiKey: typeof value.apiKey === "string" ? value.apiKey : "",
+    apiKey:
+      providerRequiresApiKey({ id: providerId, type }) && typeof value.apiKey === "string"
+        ? value.apiKey
+        : "",
     baseUrl: storedBaseUrl || defaultApiUrlForStoredProvider(providerId, type),
     ...(typeof value.customHeaders === "string" && value.customHeaders.trim() ? { customHeaders: value.customHeaders } : {}),
     defaultModelId,
@@ -122,6 +136,7 @@ function normalizeProvider(value: unknown): AiProviderConfig | null {
     id: providerId,
     models,
     name: value.name,
+    apiStyle,
     type
   };
 }

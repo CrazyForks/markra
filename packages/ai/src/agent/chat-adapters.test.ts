@@ -71,6 +71,36 @@ describe("AI chat adapters", () => {
     });
   });
 
+  it("builds OpenAI Responses requests with Codex-shaped input messages", () => {
+    const request = getChatAdapter("openai-responses").buildRequest(
+      provider({ apiStyle: "openai-responses", baseUrl: "https://proxy.example.test/v1", type: "openai" }),
+      "writer-model",
+      messages,
+      { stream: true }
+    );
+
+    expect(request).toEqual({
+      body: {
+        input: [
+          {
+            content: [{ text: "Rewrite this.", type: "input_text" }],
+            role: "user",
+            type: "message"
+          }
+        ],
+        instructions: "You edit Markdown.",
+        model: "writer-model",
+        stream: true,
+        tools: []
+      },
+      headers: {
+        Authorization: "Bearer secret",
+        "content-type": "application/json"
+      },
+      url: "https://proxy.example.test/v1/responses"
+    });
+  });
+
   it("adds custom provider headers to chat requests", () => {
     const request = getChatAdapter("openai-compatible").buildRequest(
       provider({
@@ -864,6 +894,22 @@ describe("AI chat adapters", () => {
       reasoning: { effort: "none" },
       tools: [{ type: "web_search" }]
     });
+  });
+
+  it("does not send API key auth for Ollama chat requests", () => {
+    const request = getChatAdapter("ollama").buildRequest(
+      provider({
+        apiKey: "stale-local-key",
+        baseUrl: "http://localhost:11434/v1",
+        type: "ollama"
+      }),
+      "llama3.3",
+      messages,
+      { stream: true }
+    );
+
+    expect(request.headers).not.toHaveProperty("Authorization");
+    expect(request.headers).not.toHaveProperty("authorization");
   });
 
   it("parses DeepSeek reasoning stream fields separately from final text", () => {

@@ -72,6 +72,7 @@ import {
   type RemoteClipboardImage
 } from "@markra/editor";
 import {
+  createAiAgentSessionId,
   defaultSplitVisualPanePercent,
   deleteStoredAiAgentSession,
   initializeStoredAiAgentSession,
@@ -230,6 +231,12 @@ export default function App() {
     name: "Untitled.md"
   });
   const reconciledAiWorkspaceKeyRef = useRef<string | null | undefined>(undefined);
+  const aiAgentInitialSessionOptionsRef = useRef({
+    agentModelId: null as string | null,
+    agentProviderId: null as string | null,
+    thinkingEnabled: false,
+    webSearchEnabled: false
+  });
   const translate = useCallback((key: I18nKey) => t(appLanguage.language, key), [appLanguage.language]);
   const editor = useEditorController();
   const getEditorCurrentMarkdown = editor.getCurrentMarkdown;
@@ -316,7 +323,6 @@ export default function App() {
   const {
     clearOpenDocument,
     createBlankDocument,
-    createWorkspaceSession,
     confirmCanDiscardCurrentDocument,
     detachDeletedDocumentFile,
     document,
@@ -461,10 +467,6 @@ export default function App() {
   const handleAiPreviewReady = useCallback((result: AiDiffResult, previewId?: string) => {
     editor.scrollToAiPreview(result, { previewId });
   }, [editor]);
-  const createAiAgentInitialSessionOptions = useCallback(() => ({
-    agentModelId: aiSettings.agentModelId,
-    agentProviderId: aiSettings.agentProviderId
-  }), [aiSettings.agentModelId, aiSettings.agentProviderId]);
   const handleAiAgentSessionRestore = useCallback((session: { panelOpen: boolean; panelWidth: number | null }) => {
     setAiAgentOpen(session.panelOpen);
     setAiAgentPanelWidth(clampNumber(session.panelWidth, aiAgentPanelMinWidth, aiAgentPanelMaxWidth) ?? aiAgentPanelDefaultWidth);
@@ -514,6 +516,22 @@ export default function App() {
     workspaceKey,
     workspaceFiles: fileTreeFiles
   });
+  aiAgentInitialSessionOptionsRef.current = {
+    agentModelId: aiSettings.agentModelId,
+    agentProviderId: aiSettings.agentProviderId,
+    thinkingEnabled: aiAgent.thinkingEnabled,
+    webSearchEnabled: aiAgent.webSearchEnabled
+  };
+  const createAiAgentInitialSessionOptions = useCallback(() => ({
+    ...aiAgentInitialSessionOptionsRef.current
+  }), []);
+  const createInitializedAiAgentSession = useCallback(async () => {
+    const sessionId = createAiAgentSessionId();
+
+    await initializeStoredAiAgentSession(sessionId, workspaceKey, createAiAgentInitialSessionOptions());
+    selectWorkspaceSession(sessionId);
+    return sessionId;
+  }, [createAiAgentInitialSessionOptions, selectWorkspaceSession, workspaceKey]);
   const aiAgentSessionRefreshKey = [
     activeAiAgentSessionId ?? "none",
     workspaceKey ?? "none",
@@ -550,11 +568,17 @@ export default function App() {
       return;
     }
 
-    const nextSessionId = createWorkspaceSession();
-    initializeStoredAiAgentSession(nextSessionId, workspaceKey, createAiAgentInitialSessionOptions()).then(() => {
+    createInitializedAiAgentSession().then(() => {
       aiAgentSessions.refresh().catch(() => {});
     }).catch(() => {});
-  }, [activeAiAgentSessionId, aiAgentSessions, createAiAgentInitialSessionOptions, createWorkspaceSession, selectWorkspaceSession, workspaceKey]);
+  }, [
+    activeAiAgentSessionId,
+    aiAgentSessions,
+    createAiAgentInitialSessionOptions,
+    createInitializedAiAgentSession,
+    selectWorkspaceSession,
+    workspaceKey
+  ]);
   const closeAiCommand = aiCommand.closeAiCommand;
   const restoreAiCommand = aiCommand.restoreAiCommand;
   const handleAiCommandClose = useCallback(() => {
@@ -602,13 +626,11 @@ export default function App() {
     aiCommand.closeAiCommand();
   }, [aiAgentOpen, aiCommand.closeAiCommand, editorPreferences.preferences.closeAiCommandOnAgentPanelOpen]);
   const handleCreateAiAgentSession = useCallback(() => {
-    const sessionId = createWorkspaceSession();
-
     openAiAgentPanel();
-    initializeStoredAiAgentSession(sessionId, workspaceKey, createAiAgentInitialSessionOptions()).then(() => {
+    createInitializedAiAgentSession().then(() => {
       aiAgentSessions.refresh().catch(() => {});
     }).catch(() => {});
-  }, [aiAgentSessions, createAiAgentInitialSessionOptions, createWorkspaceSession, openAiAgentPanel, workspaceKey]);
+  }, [aiAgentSessions, createInitializedAiAgentSession, openAiAgentPanel]);
   const handleSelectAiAgentSession = useCallback((sessionId: string) => {
     selectWorkspaceSession(sessionId);
     openAiAgentPanel();
@@ -631,14 +653,13 @@ export default function App() {
       if (remainingSessions[0]) {
         selectWorkspaceSession(remainingSessions[0].id);
       } else {
-        const nextSessionId = createWorkspaceSession();
-        await initializeStoredAiAgentSession(nextSessionId, workspaceKey, createAiAgentInitialSessionOptions());
+        await createInitializedAiAgentSession();
       }
     }
 
     await aiAgentSessions.refresh();
     openAiAgentPanel();
-  }, [activeAiAgentSessionId, aiAgentSessions, createAiAgentInitialSessionOptions, createWorkspaceSession, openAiAgentPanel, selectWorkspaceSession, workspaceKey]);
+  }, [activeAiAgentSessionId, aiAgentSessions, createInitializedAiAgentSession, openAiAgentPanel, selectWorkspaceSession]);
   const handleArchiveAiAgentSession = useCallback(async (sessionId: string, archived: boolean) => {
     const remainingSessions = aiAgentSessions.sessions.filter(
       (session) => session.id !== sessionId && session.archivedAt === null
@@ -650,14 +671,13 @@ export default function App() {
       if (remainingSessions[0]) {
         selectWorkspaceSession(remainingSessions[0].id);
       } else {
-        const nextSessionId = createWorkspaceSession();
-        await initializeStoredAiAgentSession(nextSessionId, workspaceKey, createAiAgentInitialSessionOptions());
+        await createInitializedAiAgentSession();
       }
     }
 
     await aiAgentSessions.refresh();
     openAiAgentPanel();
-  }, [activeAiAgentSessionId, aiAgentSessions, createAiAgentInitialSessionOptions, createWorkspaceSession, openAiAgentPanel, selectWorkspaceSession, workspaceKey]);
+  }, [activeAiAgentSessionId, aiAgentSessions, createInitializedAiAgentSession, openAiAgentPanel, selectWorkspaceSession]);
   const handleTextSelectionChange = useCallback((selection: AiSelectionContext | null) => {
     updateActiveAiSelection(selection);
 

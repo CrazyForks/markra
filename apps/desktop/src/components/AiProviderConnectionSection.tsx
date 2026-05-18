@@ -9,11 +9,13 @@ import {
 } from "./AiProviderSettingsControls";
 import { aiProviderApiStyleLabel } from "./AiProviderBadge";
 import {
-  aiProviderApiStyles,
-  defaultApiUrlForApiStyle,
+  defaultApiUrlForRequestStyle,
+  editableRequestStylesForProvider,
+  providerRequiresApiKey,
+  requestStyleForProviderType,
   readAiProviderCustomHeaders,
-  type AiProviderApiStyle,
-  type AiProviderConfig
+  type AiProviderConfig,
+  type AiProviderRequestStyle
 } from "@markra/providers";
 import type { AiProviderActionState } from "../hooks/useAiProviderSettingsPanelState";
 import type { I18nKey } from "@markra/shared";
@@ -58,6 +60,9 @@ export function AiProviderConnectionSection({
   const [customHeadersDraft, setCustomHeadersDraft] = useState(provider.customHeaders ?? "");
   const [customHeadersError, setCustomHeadersError] = useState<string | null>(null);
   const customHeadersJsonLabel = translate("settings.ai.customHeadersJson");
+  const selectedApiStyle = provider.apiStyle ?? requestStyleForProviderType(provider.type);
+  const editableApiStyles = editableRequestStylesForProvider(provider);
+  const requiresApiKey = providerRequiresApiKey(provider);
 
   const openCustomHeadersDialog = () => {
     setCustomHeadersDraft(provider.customHeaders ?? "");
@@ -83,37 +88,39 @@ export function AiProviderConnectionSection({
     <AiSettingsSection label={translate("settings.sections.aiProviders")}>
       <div className="grid gap-4 py-2">
         {isCustomProvider ? (
-          <>
-            <AiSettingsTextField
-              label={translate("settings.ai.providerName")}
-              value={provider.name}
-              onChange={(name) => updateSelectedProvider((current) => ({ ...current, name }))}
-            />
-            <AiSettingsSelectField<AiProviderApiStyle>
-              label={translate("settings.ai.apiStyle")}
-              value={provider.type}
-              onChange={(type) =>
-                updateSelectedProvider((current) => ({
-                  ...current,
-                  baseUrl: current.baseUrl || defaultApiUrlForApiStyle(type),
-                  type
-                }))
-              }
-            >
-              {aiProviderApiStyles.map((type) => (
-                <option key={type} value={type}>
-                  {aiProviderApiStyleLabel(type, translate)}
-                </option>
-              ))}
-            </AiSettingsSelectField>
-          </>
+          <AiSettingsTextField
+            label={translate("settings.ai.providerName")}
+            value={provider.name}
+            onChange={(name) => updateSelectedProvider((current) => ({ ...current, name }))}
+          />
         ) : null}
-        <AiSettingsTextField
-          label={translate("settings.ai.apiKey")}
-          type="password"
-          value={provider.apiKey ?? ""}
-          onChange={(apiKey) => updateSelectedProvider((current) => ({ ...current, apiKey }))}
-        />
+        {editableApiStyles.length > 0 ? (
+          <AiSettingsSelectField<AiProviderRequestStyle>
+            label={translate("settings.ai.apiStyle")}
+            value={selectedApiStyle}
+            onChange={(apiStyle) =>
+              updateSelectedProvider((current) => ({
+                ...current,
+                apiStyle,
+                baseUrl: current.baseUrl || defaultApiUrlForRequestStyle(apiStyle)
+              }))
+            }
+          >
+            {editableApiStyles.map((apiStyle) => (
+              <option key={apiStyle} value={apiStyle}>
+                {aiProviderApiStyleLabel(apiStyle, translate)}
+              </option>
+            ))}
+          </AiSettingsSelectField>
+        ) : null}
+        {requiresApiKey ? (
+          <AiSettingsTextField
+            label={translate("settings.ai.apiKey")}
+            type="password"
+            value={provider.apiKey ?? ""}
+            onChange={(apiKey) => updateSelectedProvider((current) => ({ ...current, apiKey }))}
+          />
+        ) : null}
         <div className="grid gap-3 min-[720px]:grid-cols-[minmax(0,1fr)_auto] min-[720px]:items-end">
           <AiSettingsTextField
             label={translate("settings.ai.apiAddress")}
@@ -143,10 +150,12 @@ export function AiProviderConnectionSection({
             {translate("settings.ai.customHeadersEdit")}
           </AiSettingsActionButton>
         </div>
-        <p className="m-0 flex items-center gap-2 text-[12px] leading-5 text-(--text-secondary)">
-          <KeyRound aria-hidden="true" size={13} />
-          {translate("settings.ai.localStorageNotice")}
-        </p>
+        {requiresApiKey ? (
+          <p className="m-0 flex items-center gap-2 text-[12px] leading-5 text-(--text-secondary)">
+            <KeyRound aria-hidden="true" size={13} />
+            {translate("settings.ai.localStorageNotice")}
+          </p>
+        ) : null}
       </div>
       {customHeadersDialogOpen ? (
         <Modal

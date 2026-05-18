@@ -240,6 +240,7 @@ async function runDocumentToolCallingAgent({
   let finalContent = "";
   let finishReason: string | undefined;
   let latestAssistantText = "";
+  let providerErrorMessage = "";
 
   agent.subscribe((event) => {
     onEvent?.(event);
@@ -259,6 +260,9 @@ async function runDocumentToolCallingAgent({
 
     finalContent = assistantTextFromAgentMessage(event.message.content);
     if (finalContent.trim()) latestAssistantText = finalContent;
+    if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim()) {
+      providerErrorMessage = event.message.errorMessage.trim();
+    }
     finishReason = event.message.stopReason;
   });
 
@@ -271,6 +275,9 @@ async function runDocumentToolCallingAgent({
     selection,
     webSearchMode: nativeWebSearchEnabled ? "native" : activeWebSearchSettings ? "custom" : "none"
   }));
+  if (providerErrorMessage) {
+    throw new Error(providerErrorMessage);
+  }
 
   return {
     content: preparedPreview ? "" : (finalContent || latestAssistantText).trim(),

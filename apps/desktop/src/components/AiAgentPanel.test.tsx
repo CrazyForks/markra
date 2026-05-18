@@ -580,6 +580,20 @@ describe("AiAgentPanel", () => {
     expect(screen.getByText("First item").closest("ul")).toBeInTheDocument();
   });
 
+  it("renders assistant errors with a danger bubble treatment", () => {
+    renderAgentPanel({
+      messages: [assistantMessage({ isError: true, text: "Concurrency limit exceeded." })]
+    });
+
+    const bubble = screen.getByText("Concurrency limit exceeded.").closest(".ai-chat-markdown")?.parentElement;
+
+    if (!bubble) throw new Error("Expected assistant error bubble");
+    expect(bubble).toHaveClass("border-(--danger)");
+    expect(bubble).toHaveClass("bg-(--bg-primary)");
+    expect(bubble).toHaveClass("text-(--danger)");
+    expect(screen.getByText("Concurrency limit exceeded.").closest(".ai-chat-markdown")).toHaveClass("ai-chat-markdown-danger");
+  });
+
   it("renders visible process steps for assistant messages", () => {
     renderAgentPanel({
       messages: [

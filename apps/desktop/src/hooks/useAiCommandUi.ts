@@ -10,7 +10,7 @@ import {
 } from "@markra/ai";
 import { getProviderCapabilities, type AiProviderConfig } from "@markra/providers";
 import type { I18nKey } from "@markra/shared";
-import { requestNativeChatStream } from "../lib/tauri";
+import { requestNativeChat, requestNativeChatStream } from "../lib/tauri";
 
 type AiTextDiffResult = Extract<AiDiffResult, { type: "insert" | "replace" }>;
 export type AiCommandStatus = "idle" | "composing" | "thinking" | "streaming" | "suggestion" | "error";
@@ -121,7 +121,9 @@ export function useAiCommandUi(ctx: AiCommandContext) {
         complete: (provider, model, messages, completionOptions) =>
           chatCompletionStream(provider, model, messages, {
             ...completionOptions,
-            streamTransport: requestNativeChatStream
+            fallbackTransport: requestNativeChat,
+            streamTransport: requestNativeChatStream,
+            useVercelAiSdk: true
           }),
         documentContent,
         documentPath: ctx.documentPath ?? null,

@@ -1,5 +1,10 @@
-import type { AiModelCapability, AiProviderApiStyle, AiProviderConfig, AiProviderModel } from "./providers";
-import { enrichAiProviderModelCapabilities, normalizeAiModelCapabilities, readAiProviderCustomHeaders } from "./providers";
+import type { AiModelCapability, AiProviderApiStyle, AiProviderConfig, AiProviderModel, AiProviderRequestStyle } from "./providers";
+import {
+  enrichAiProviderModelCapabilities,
+  normalizeAiModelCapabilities,
+  providerRequiresApiKey,
+  readAiProviderCustomHeaders
+} from "./providers";
 import { isRecord, joinApiUrl } from "@markra/shared";
 
 type NativeAiHttpRequest = {
@@ -88,14 +93,22 @@ const endpointByApiStyle: Record<AiProviderApiStyle, ProviderEndpoint> = {
   }
 };
 
+const endpointByRequestStyle: Record<AiProviderRequestStyle, ProviderEndpoint | null> = {
+  anthropic: endpointByApiStyle.anthropic,
+  google: endpointByApiStyle.google,
+  "openai-compatible": endpointByApiStyle["openai-compatible"],
+  "openai-responses": endpointByApiStyle.openai
+};
+
 export function buildAiProviderModelsRequest(provider: AiProviderConfig): AiProviderHttpRequest {
-  const endpoint = endpointByApiStyle[provider.type];
+  const endpoint = provider.apiStyle ? endpointByRequestStyle[provider.apiStyle] : endpointByApiStyle[provider.type];
+  if (!endpoint) throw new Error("Model list is not available for this API style.");
   const baseUrl = provider.baseUrl?.trim() || endpoint.baseUrl;
   if (!baseUrl) throw new Error("API URL is required.");
 
   return {
     headers: {
-      ...buildAuthHeaders(endpoint.auth, provider.apiKey?.trim() ?? ""),
+      ...buildAuthHeaders(endpoint.auth, readProviderApiKey(provider)),
       ...readAiProviderCustomHeaders(provider)
     },
     method: "GET",
@@ -134,15 +147,16 @@ function missingAiProviderTransport(): never {
 }
 
 export function parseAiProviderModels(provider: AiProviderConfig, body: unknown): AiProviderModel[] {
-  const records = readModelRecords(provider.type, body);
+  const apiStyle = provider.apiStyle ?? provider.type;
+  const records = readModelRecords(apiStyle, body);
   const seenIds = new Set<string>();
   const models: AiProviderModel[] = [];
 
   for (const record of records) {
-    const id = readModelId(provider.type, record);
+    const id = readModelId(apiStyle, record);
     if (!id || seenIds.has(id)) continue;
 
-    const capabilities = inferModelCapabilities(provider.type, record, id);
+    const capabilities = inferModelCapabilities(apiStyle, record, id);
     if (capabilities.length === 0) continue;
 
     seenIds.add(id);
@@ -150,7 +164,7 @@ export function parseAiProviderModels(provider: AiProviderConfig, body: unknown)
       capabilities,
       enabled: true,
       id,
-      name: readModelName(provider.type, record, id)
+      name: readModelName(apiStyle, record, id)
     }));
   }
 
@@ -166,7 +180,11 @@ function buildAuthHeaders(auth: ProviderEndpoint["auth"], apiKey: string): Recor
   return { Authorization: `Bearer ${apiKey}` };
 }
 
-function readModelRecords(apiStyle: AiProviderApiStyle, body: unknown): Record<string, unknown>[] {
+function readProviderApiKey(provider: AiProviderConfig) {
+  return providerRequiresApiKey(provider) ? provider.apiKey?.trim() ?? "" : "";
+}
+
+function readModelRecords(apiStyle: AiProviderApiStyle | AiProviderRequestStyle, body: unknown): Record<string, unknown>[] {
   if (Array.isArray(body)) return body.filter(isRecord);
   if (!isRecord(body)) return [];
 
@@ -177,7 +195,7 @@ function readModelRecords(apiStyle: AiProviderApiStyle, body: unknown): Record<s
   return [];
 }
 
-function readModelId(apiStyle: AiProviderApiStyle, record: Record<string, unknown>) {
+function readModelId(apiStyle: AiProviderApiStyle | AiProviderRequestStyle, record: Record<string, unknown>) {
   const id = typeof record.id === "string" ? record.id : undefined;
   const name = typeof record.name === "string" ? record.name : undefined;
 
@@ -186,7 +204,7 @@ function readModelId(apiStyle: AiProviderApiStyle, record: Record<string, unknow
   return id ?? name;
 }
 
-function readModelName(apiStyle: AiProviderApiStyle, record: Record<string, unknown>, id: string) {
+function readModelName(apiStyle: AiProviderApiStyle | AiProviderRequestStyle, record: Record<string, unknown>, id: string) {
   if (typeof record.displayName === "string") return record.displayName;
   if (typeof record.display_name === "string") return record.display_name;
   if (typeof record.name === "string" && !(apiStyle === "google" && record.name.startsWith("models/"))) return record.name;
@@ -195,7 +213,7 @@ function readModelName(apiStyle: AiProviderApiStyle, record: Record<string, unkn
 }
 
 // Converts provider-specific model metadata into Markra's internal capability flags.
-function inferModelCapabilities(apiStyle: AiProviderApiStyle, record: Record<string, unknown>, id: string): AiModelCapability[] {
+function inferModelCapabilities(apiStyle: AiProviderApiStyle | AiProviderRequestStyle, record: Record<string, unknown>, id: string): AiModelCapability[] {
   if (apiStyle === "google") return inferGoogleCapabilities(record, id);
   if (apiStyle === "openrouter") return inferOpenRouterCapabilities(record, id);
 

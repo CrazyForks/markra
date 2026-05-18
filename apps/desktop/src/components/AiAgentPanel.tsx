@@ -502,7 +502,7 @@ export function AiAgentPanel({
                 }
 
                 const assistantBubbleClassName = message.isError
-                  ? "min-w-0 overflow-hidden rounded-lg border border-[color:color-mix(in_oklab,var(--danger)_28%,var(--border-default))] bg-[color:color-mix(in_oklab,var(--danger)_8%,var(--bg-primary))] px-3 py-2 text-[13px] leading-5 font-[540] text-(--text-primary)"
+                  ? "min-w-0 overflow-hidden rounded-lg border border-(--danger) bg-(--bg-primary) px-3 py-2 text-[13px] leading-5 font-[540] text-(--danger)"
                   : "min-w-0 overflow-hidden rounded-lg border border-(--border-default) bg-(--bg-primary) px-3 py-2 text-[13px] leading-5 font-[540] text-(--text-primary)";
                 const hasVisibleActivities = message.activities?.some(
                   (activity) => activity.kind === "assistant_message" || activity.kind === "tool_call"
@@ -541,7 +541,7 @@ export function AiAgentPanel({
                                       className={index === 0 ? "" : "mt-2 border-t border-(--border-default) pt-2"}
                                       key={`${message.id}:thinking:${index + 1}`}
                                     >
-                                      <AiMarkdownMessage content={section} />
+                                      <AiMarkdownMessage className="ai-chat-markdown-thinking" content={section} />
                                     </div>
                                   ))}
                                 </div>
@@ -550,7 +550,7 @@ export function AiAgentPanel({
                           ) : showFallbackThinking && !message.text ? (
                             <p className="m-0 text-[12px] leading-5 text-(--text-secondary)">{label("app.aiAgentThinking")}</p>
                           ) : null}
-                          <AiMarkdownMessage content={message.text} />
+                          <AiMarkdownMessage className={message.isError ? "ai-chat-markdown-danger" : ""} content={message.text} />
                         </div>
                       ) : null}
                     </div>

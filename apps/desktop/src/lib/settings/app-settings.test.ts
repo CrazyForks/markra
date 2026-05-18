@@ -1615,6 +1615,44 @@ describe("app settings", () => {
     }));
   });
 
+  it("lets new AI agent sessions use explicit mode options over remembered preferences", async () => {
+    const sessionStore = {
+      get: vi.fn(),
+      save: vi.fn(),
+      set: vi.fn()
+    };
+    const indexStore = {
+      get: vi.fn(),
+      save: vi.fn(),
+      set: vi.fn()
+    };
+    mockedLoad.mockImplementation(async (path) => {
+      if (path === "ai-agent-sessions/session-new.json") return sessionStore as unknown as Awaited<ReturnType<typeof load>>;
+      if (path === "ai-agent-sessions/index.json") return indexStore as unknown as Awaited<ReturnType<typeof load>>;
+
+      return store as unknown as Awaited<ReturnType<typeof load>>;
+    });
+    store.get.mockImplementation(async (key) =>
+      key === "aiAgentPreferences" ? { thinkingEnabled: false, webSearchEnabled: false } : undefined
+    );
+    sessionStore.get.mockResolvedValue(undefined);
+    indexStore.get.mockResolvedValue([]);
+
+    await initializeStoredAiAgentSession("session-new", "/mock-files/vault", {
+      agentModelId: "gpt-5.5",
+      agentProviderId: "openai",
+      thinkingEnabled: true,
+      webSearchEnabled: true
+    });
+
+    expect(sessionStore.set).toHaveBeenCalledWith("session", expect.objectContaining({
+      agentModelId: "gpt-5.5",
+      agentProviderId: "openai",
+      thinkingEnabled: true,
+      webSearchEnabled: true
+    }));
+  });
+
   it("loads and persists AI agent preferences", async () => {
     store.get.mockResolvedValue({ thinkingEnabled: true, webSearchEnabled: true });
 

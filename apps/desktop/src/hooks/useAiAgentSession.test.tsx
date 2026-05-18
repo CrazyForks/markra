@@ -1051,6 +1051,102 @@ describe("useAiAgentSession", () => {
     });
   });
 
+  it("lets an in-flight agent request finish in its original session after switching sessions", async () => {
+    let finishRun: (() => unknown) | undefined;
+    const runCanFinish = new Promise((resolve) => {
+      finishRun = () => resolve(undefined);
+    });
+    mockedGetStoredAiAgentSession
+      .mockResolvedValueOnce(storedAgentSession({
+        agentModelId: "gpt-5.5",
+        agentProviderId: "openai",
+        draft: "Session A",
+        panelOpen: true,
+        panelWidth: 456
+      }))
+      .mockResolvedValueOnce(storedAgentSession({
+        agentModelId: "gpt-5.5",
+        agentProviderId: "openai",
+        draft: "Session B",
+        panelOpen: true,
+        panelWidth: 456
+      }));
+    mockedRunDocumentAiAgent.mockImplementation(async ({ onTextDelta }) => {
+      await runCanFinish;
+      onTextDelta?.("Finished after switching away.");
+
+      return {
+        content: "Finished after switching away.",
+        finishReason: "stop"
+      };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) =>
+        useAiAgentSession(aiAgentSessionContext({
+          panelOpen: true,
+          panelWidth: 456,
+          sessionId,
+          workspaceKey: "/vault"
+        })),
+      {
+        initialProps: {
+          sessionId: "session-a"
+        }
+      }
+    );
+
+    await waitFor(() => expect(result.current.draft).toBe("Session A"));
+
+    let submitPromise: Promise<unknown> | undefined;
+    act(() => {
+      submitPromise = result.current.submit("Keep this request running");
+    });
+    await waitFor(() => expect(mockedRunDocumentAiAgent).toHaveBeenCalledTimes(1));
+
+    rerender({
+      sessionId: "session-b"
+    });
+    await waitFor(() => expect(result.current.draft).toBe("Session B"));
+
+    await act(async () => {
+      finishRun?.();
+      await submitPromise;
+    });
+
+    await waitFor(() =>
+      expect(mockedSaveStoredAiAgentSession).toHaveBeenCalledWith("session-a", {
+        agentModelId: "gpt-5.5",
+        agentProviderId: "openai",
+        draft: "",
+        messages: [
+          { id: expect.any(Number), role: "user", text: "Keep this request running" },
+          {
+            activities: [
+              {
+                id: "call:1",
+                kind: "ai_call",
+                label: "app.aiAgentTraceCall 1",
+                status: "completed",
+                turn: 1
+              }
+            ],
+            id: expect.any(Number),
+            role: "assistant",
+            text: "Finished after switching away.",
+            thinking: ""
+          }
+        ],
+        panelOpen: true,
+        panelWidth: 456,
+        thinkingEnabled: false,
+        webSearchEnabled: false
+      }, {
+        workspaceKey: "/vault"
+      })
+    );
+  });
+
   it("generates and persists an AI session title after the first completed exchange", async () => {
     mockedRunDocumentAiAgent.mockResolvedValue({
       content: "Gold pricing looks incorrect while XAU is missing in the dataset.",

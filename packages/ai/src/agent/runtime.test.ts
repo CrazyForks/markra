@@ -18,6 +18,26 @@ function provider(overrides: Partial<AiProviderConfig> = {}): AiProviderConfig {
 }
 
 describe("inline AI agent runtime", () => {
+  it("surfaces provider errors from the streaming runtime", async () => {
+    const complete = vi.fn().mockRejectedValue(new Error("Concurrency limit exceeded for user, please retry later"));
+
+    await expect(runInlineAiAgent({
+      complete,
+      documentContent: "# Draft\n\nOriginal body",
+      documentPath: "/vault/README.md",
+      model: "gpt-5.5",
+      prompt: "make it clearer",
+      provider: provider(),
+      target: {
+        from: 9,
+        original: "Original body",
+        promptText: "Original body",
+        to: 22,
+        type: "replace"
+      }
+    })).rejects.toThrow("Concurrency limit exceeded for user, please retry later");
+  });
+
   it("keeps continuation context local instead of sending unrelated document sections", async () => {
     const documentContent = [
       "# Synthetic Topic Alpha",

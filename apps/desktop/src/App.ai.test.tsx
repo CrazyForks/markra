@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { defaultMarkdownShortcuts } from "@markra/editor";
 import { defaultAiQuickActionPrompts } from "./lib/ai-actions";
 import {
@@ -8,9 +8,11 @@ import {
   mockFolderPath,
   mockNativePath,
   mockedCreateAiAgentSessionId,
+  mockedInitializeStoredAiAgentSession,
   mockedGetStoredAiAgentSession,
   mockedGetStoredEditorPreferences,
   mockedGetStoredAiSettings,
+  mockedGetStoredAiAgentPreferences,
   mockedGetStoredWorkspaceState,
   mockedListNativeMarkdownFilesForPath,
   mockedListStoredAiAgentSessions,
@@ -480,6 +482,90 @@ describe("Markra AI workspace", () => {
       )
     );
     await waitFor(() => expect(within(agentPanel).getByRole("button", { name: "Deep thinking" })).toHaveAttribute("aria-pressed", "true"));
+    expect(within(agentPanel).getByRole("button", { name: "Web search" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps remembered mode toggles when creating a new Markra AI session", async () => {
+    const initializedSessions = new Set(["session-app"]);
+    let finishInitialize: (() => unknown) | undefined;
+
+    mockedCreateAiAgentSessionId
+      .mockReturnValueOnce("session-app")
+      .mockReturnValue("session-new");
+    mockedGetStoredAiAgentPreferences.mockResolvedValue({ thinkingEnabled: false, webSearchEnabled: false });
+    mockedGetStoredAiSettings.mockResolvedValue({
+      agentDefaultModelId: "gpt-5.5",
+      agentDefaultProviderId: "openai",
+      defaultModelId: "gpt-5.5",
+      defaultProviderId: "openai",
+      providers: [
+        {
+          apiKey: "openai-key",
+          baseUrl: "https://api.openai.com/v1",
+          defaultModelId: "gpt-5.5",
+          enabled: true,
+          id: "openai",
+          models: [{ capabilities: ["text", "reasoning", "tools", "web"], enabled: true, id: "gpt-5.5", name: "GPT-5.5" }],
+          name: "OpenAI",
+          type: "openai"
+        }
+      ]
+    });
+    mockedListStoredAiAgentSessions.mockResolvedValue([
+      agentSessionSummary({
+        createdAt: 10,
+        id: "session-app",
+        title: "OpenAI session",
+        updatedAt: 20,
+        workspaceKey: "__untitled__"
+      })
+    ]);
+    mockedGetStoredAiAgentSession.mockImplementation(async (sessionId) =>
+      storedAgentSession({
+        agentModelId: "gpt-5.5",
+        agentProviderId: "openai",
+        panelOpen: true,
+        thinkingEnabled: sessionId === "session-new" && initializedSessions.has(sessionId),
+        webSearchEnabled: sessionId === "session-new" && initializedSessions.has(sessionId)
+      })
+    );
+    mockedInitializeStoredAiAgentSession.mockImplementation(async (sessionId) => {
+      await new Promise((resolve) => {
+        finishInitialize = () => resolve(undefined);
+      });
+      initializedSessions.add(sessionId);
+    });
+
+    renderApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Markra AI" }));
+    const agentPanel = screen.getByRole("complementary", { name: "Markra AI" });
+    const deepThinking = within(agentPanel).getByRole("button", { name: "Deep thinking" });
+    const webSearch = within(agentPanel).getByRole("button", { name: "Web search" });
+
+    await waitFor(() => expect(mockedGetStoredAiAgentSession).toHaveBeenCalledWith("session-app"));
+    await waitFor(() => expect(deepThinking).toHaveAttribute("aria-pressed", "false"));
+    fireEvent.click(deepThinking);
+    fireEvent.click(webSearch);
+    expect(deepThinking).toHaveAttribute("aria-pressed", "true");
+    expect(webSearch).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(agentPanel).getByRole("button", { name: "Sessions" }));
+    fireEvent.click(await within(agentPanel).findByRole("menuitem", { name: "New session" }));
+
+    await waitFor(() => expect(mockedInitializeStoredAiAgentSession).toHaveBeenCalledWith("session-new", null, {
+      agentModelId: "gpt-5.5",
+      agentProviderId: "openai",
+      thinkingEnabled: true,
+      webSearchEnabled: true
+    }));
+
+    await act(async () => {
+      finishInitialize?.();
+    });
+
+    await waitFor(() => expect(mockedGetStoredAiAgentSession).toHaveBeenCalledWith("session-new"));
+    expect(within(agentPanel).getByRole("button", { name: "Deep thinking" })).toHaveAttribute("aria-pressed", "true");
     expect(within(agentPanel).getByRole("button", { name: "Web search" })).toHaveAttribute("aria-pressed", "true");
   });
 

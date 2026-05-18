@@ -98,7 +98,7 @@ const messages: LocaleMessages = {
   "settings.ai.configured": "已設定",
   "settings.ai.notConfigured": "未設定",
   "settings.ai.providerLogo": "標誌",
-  "settings.ai.apiStyleOpenAiCompatible": "OpenAI 相容",
+  "settings.ai.apiStyleOpenAiCompatible": "OpenAI compatible",
   "settings.ai.customHeaders": "自訂 Header",
   "settings.ai.customHeadersDescription": "會加入模型列表和聊天請求。請輸入 JSON 物件。",
   "settings.ai.customHeadersEdit": "編輯自訂 Header",
