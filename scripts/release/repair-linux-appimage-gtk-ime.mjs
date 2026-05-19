@@ -4,6 +4,7 @@ import path from "node:path";
 const gtkHookRelativePath = path.join("apprun-hooks", "linuxdeploy-plugin-gtk.sh");
 const archGtkModulePath = "/usr/lib/gtk-3.0";
 const hostGtkInputMethodPolicyMarker = "MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES";
+const fcitxXimFallbackMarker = "MARKRA_FCITX_XIM_FALLBACK";
 
 const hostGtkInputMethodPolicy = `# Markra: keep Linux AppImage input methods compatible with host IBus/Fcitx.
 # Tauri's GTK hook is generated on Ubuntu and can point GTK_IM_MODULE_FILE at
@@ -20,6 +21,17 @@ for gtk_im_module_file in "\${${hostGtkInputMethodPolicyMarker}[@]}"; do
     break
   fi
 done`;
+
+const fcitxXimFallbackPolicy = `# Markra: Fcitx GTK immodules can fail to load from AppImage-bundled GTK.
+# Use the XIM fallback that works with host Fcitx on Manjaro/GNOME Wayland.
+if [ "\${XMODIFIERS:-}" = "@im=fcitx" ]; then
+  case "\${GTK_IM_MODULE:-}" in
+    ""|"fcitx"|"fcitx5")
+      export ${fcitxXimFallbackMarker}=1
+      export GTK_IM_MODULE=xim
+      ;;
+  esac
+fi`;
 
 function usage() {
   return [
@@ -66,6 +78,18 @@ function repairGtkInputMethodCache(content) {
   return content.replace(internalCachePattern, hostGtkInputMethodPolicy);
 }
 
+function repairFcitxXimFallback(content) {
+  if (content.includes(fcitxXimFallbackMarker)) {
+    return content;
+  }
+
+  if (content.includes(hostGtkInputMethodPolicy)) {
+    return content.replace(hostGtkInputMethodPolicy, `${hostGtkInputMethodPolicy}\n${fcitxXimFallbackPolicy}`);
+  }
+
+  return `${content.trimEnd()}\n${fcitxXimFallbackPolicy}\n`;
+}
+
 const appDir = process.argv[2] || process.env.APPIMAGE_APPDIR;
 
 if (!appDir) {
@@ -85,7 +109,7 @@ if (!fs.existsSync(gtkHookPath)) {
 }
 
 const originalHook = fs.readFileSync(gtkHookPath, "utf8");
-const repairedHook = repairGtkInputMethodCache(repairGtkPath(originalHook));
+const repairedHook = repairFcitxXimFallback(repairGtkInputMethodCache(repairGtkPath(originalHook)));
 
 if (repairedHook !== originalHook) {
   fs.writeFileSync(gtkHookPath, repairedHook);

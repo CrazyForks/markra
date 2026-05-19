@@ -50,6 +50,8 @@ test("repair-linux-appimage-gtk-ime points GTK input methods at the host module 
   const repairedHook = fs.readFileSync(hookPath, "utf8");
   assert.doesNotMatch(repairedHook, /export GTK_IM_MODULE_FILE="\$APPDIR\//);
   assert.match(repairedHook, /MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES/);
+  assert.match(repairedHook, /MARKRA_FCITX_XIM_FALLBACK/);
+  assert.match(repairedHook, /export GTK_IM_MODULE=xim/);
   assert.match(repairedHook, /\/usr\/lib\/gtk-3\.0\/3\.0\.0\/immodules\.cache/);
   assert.match(repairedHook, /export GTK_PATH="\$APPDIR\/\/usr\/lib\/x86_64-linux-gnu\/gtk-3\.0:\/usr\/lib64\/gtk-3\.0:\/usr\/lib\/x86_64-linux-gnu\/gtk-3\.0:\/usr\/lib\/gtk-3\.0"/);
 });
@@ -63,7 +65,32 @@ test("repair-linux-appimage-gtk-ime is idempotent", () => {
 
   const repairedHook = fs.readFileSync(hookPath, "utf8");
   assert.equal((repairedHook.match(/MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES=\(/gu) ?? []).length, 1);
+  assert.equal((repairedHook.match(/MARKRA_FCITX_XIM_FALLBACK=1/gu) ?? []).length, 1);
   assert.equal((repairedHook.match(/\/usr\/lib\/gtk-3\.0/gu) ?? []).length, 2);
+});
+
+test("repair-linux-appimage-gtk-ime adds the Fcitx XIM fallback to previously repaired hooks", () => {
+  const appDir = makeTempDir();
+  const hookPath = writeGtkHook(appDir, `#! /usr/bin/env bash
+export GTK_PATH="$APPDIR//usr/lib/x86_64-linux-gnu/gtk-3.0:/usr/lib64/gtk-3.0:/usr/lib/x86_64-linux-gnu/gtk-3.0:/usr/lib/gtk-3.0"
+MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES=(
+  "/usr/lib/gtk-3.0/3.0.0/immodules.cache"
+)
+for gtk_im_module_file in "\${MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES[@]}"; do
+  if [ -r "$gtk_im_module_file" ]; then
+    export GTK_IM_MODULE_FILE="$gtk_im_module_file"
+    break
+  fi
+done
+`);
+
+  const result = runRepair(appDir);
+
+  assert.equal(result.status, 0, result.stderr);
+
+  const repairedHook = fs.readFileSync(hookPath, "utf8");
+  assert.match(repairedHook, /MARKRA_FCITX_XIM_FALLBACK=1/);
+  assert.match(repairedHook, /export GTK_IM_MODULE=xim/);
 });
 
 test("repair-linux-appimage-gtk-ime fails when the GTK AppRun hook is missing", () => {

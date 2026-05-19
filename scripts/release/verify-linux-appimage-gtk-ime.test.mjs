@@ -41,6 +41,14 @@ for gtk_im_module_file in "\${MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES[@]}"; 
     break
   fi
 done
+if [ "\${XMODIFIERS:-}" = "@im=fcitx" ]; then
+  case "\${GTK_IM_MODULE:-}" in
+    ""|"fcitx"|"fcitx5")
+      export MARKRA_FCITX_XIM_FALLBACK=1
+      export GTK_IM_MODULE=xim
+      ;;
+  esac
+fi
 `);
 
   const result = runVerify(appDir);
@@ -74,4 +82,19 @@ MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES=(
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /\/usr\/lib\/gtk-3\.0/);
+});
+
+test("verify-linux-appimage-gtk-ime rejects hooks without the Fcitx XIM fallback", () => {
+  const appDir = makeTempDir();
+  writeGtkHook(appDir, `#! /usr/bin/env bash
+export GTK_PATH="$APPDIR//usr/lib/x86_64-linux-gnu/gtk-3.0:/usr/lib64/gtk-3.0:/usr/lib/x86_64-linux-gnu/gtk-3.0:/usr/lib/gtk-3.0"
+MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES=(
+  "/usr/lib/gtk-3.0/3.0.0/immodules.cache"
+)
+`);
+
+  const result = runVerify(appDir);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Fcitx XIM fallback/);
 });

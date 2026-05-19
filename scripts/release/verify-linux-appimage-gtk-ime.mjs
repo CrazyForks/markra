@@ -3,6 +3,7 @@ import path from "node:path";
 
 const gtkHookRelativePath = path.join("apprun-hooks", "linuxdeploy-plugin-gtk.sh");
 const hostGtkInputMethodPolicyMarker = "MARKRA_SYSTEM_GTK_IM_MODULE_FILE_CANDIDATES";
+const fcitxXimFallbackMarker = "MARKRA_FCITX_XIM_FALLBACK";
 const archGtkModulePath = "/usr/lib/gtk-3.0";
 const archGtkInputMethodCache = "/usr/lib/gtk-3.0/3.0.0/immodules.cache";
 
@@ -58,6 +59,10 @@ if (!content.includes(archGtkInputMethodCache)) {
 
 if (!gtkPathEntries.includes(archGtkModulePath)) {
   errors.push(`GTK_PATH must include ${archGtkModulePath} for Arch and Manjaro GTK modules.`);
+}
+
+if (!content.includes(fcitxXimFallbackMarker) || !/^ *export GTK_IM_MODULE=xim$/m.test(content)) {
+  errors.push("Fcitx XIM fallback is missing from the Linux AppImage GTK AppRun hook.");
 }
 
 if (errors.length > 0) {
