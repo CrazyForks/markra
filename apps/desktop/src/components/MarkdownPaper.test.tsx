@@ -1371,6 +1371,81 @@ describe("MarkdownPaper editing", () => {
     restoreLayout();
   });
 
+  it("reorders blocks below a table drop target", async () => {
+    const tableMarkdown = ["| Name | Role |", "| --- | --- |", "| Markra | Editor |"].join("\n");
+    const { container, editor, view } = await renderEditor(["First", "", tableMarkdown, "", "Second"].join("\n"));
+    const restoreLayout = mockTopLevelBlockDragLayout(view, container);
+    const surface = container.querySelector<HTMLElement>(".ProseMirror");
+    const paper = surface?.closest<HTMLElement>(".markdown-paper");
+    expect(surface).toBeInTheDocument();
+    expect(paper).toBeInTheDocument();
+
+    fireEvent.pointerMove(paper!, {
+      clientX: 136,
+      clientY: 112
+    });
+
+    const handle = await screen.findByRole("button", { name: "Drag block" });
+    const dataTransfer = createDragDataTransfer();
+
+    dispatchDragEvent(handle, "dragstart", {
+      clientX: 136,
+      clientY: 112,
+      dataTransfer
+    });
+    dispatchDragEvent(paper!, "dragover", {
+      clientX: 136,
+      clientY: 160,
+      dataTransfer
+    });
+    dispatchDragEvent(paper!, "drop", {
+      clientX: 136,
+      clientY: 160,
+      dataTransfer
+    });
+
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    expect(serializeMarkdown(view.state.doc)).toContain("| Markra | Editor |\n\nFirst\n\nSecond");
+    restoreLayout();
+  });
+
+  it("reorders blocks below an image drop target", async () => {
+    const { container, editor, view } = await renderEditor("First\n\n![Screenshot](assets/pasted-image.png)\n\nSecond");
+    const restoreLayout = mockTopLevelBlockDragLayout(view, container);
+    const surface = container.querySelector<HTMLElement>(".ProseMirror");
+    const paper = surface?.closest<HTMLElement>(".markdown-paper");
+    expect(surface).toBeInTheDocument();
+    expect(paper).toBeInTheDocument();
+
+    fireEvent.pointerMove(paper!, {
+      clientX: 136,
+      clientY: 112
+    });
+
+    const handle = await screen.findByRole("button", { name: "Drag block" });
+    const dataTransfer = createDragDataTransfer();
+
+    dispatchDragEvent(handle, "dragstart", {
+      clientX: 136,
+      clientY: 112,
+      dataTransfer
+    });
+    dispatchDragEvent(paper!, "dragover", {
+      clientX: 136,
+      clientY: 160,
+      dataTransfer
+    });
+    dispatchDragEvent(paper!, "drop", {
+      clientX: 136,
+      clientY: 160,
+      dataTransfer
+    });
+
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    expect(serializeMarkdown(view.state.doc)).toBe("![Screenshot](assets/pasted-image.png)\n\nFirst\n\nSecond\n");
+    restoreLayout();
+  });
+
   it("anchors the block toolbar near the first line of tall heading content", async () => {
     const { container, view } = await renderEditor("# Parent\n\nBody");
     const heading = container.querySelector<HTMLElement>(".ProseMirror > h1");
@@ -4407,6 +4482,28 @@ describe("MarkdownPaper editing", () => {
     expect(table).toHaveTextContent("Editor");
   });
 
+  it("keeps a preceding table when pressing Backspace from an empty paragraph below it", async () => {
+    const tableMarkdown = ["| Name | Role |", "| --- | --- |", "| Markra | Editor |"].join("\n");
+    const { container, editor, view } = await renderEditor([tableMarkdown, "", "![Screenshot](assets/pasted-image.png)"].join("\n"));
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    const insertPosition = findNodeEndPosition(view, "table");
+    const paragraph = view.state.schema.nodes.paragraph.create();
+    const transaction = view.state.tr.insert(insertPosition, paragraph);
+
+    view.dispatch(transaction.setSelection(TextSelection.create(transaction.doc, insertPosition + 1)));
+
+    expect(view.state.doc.child(0).type.name).toBe("table");
+    expect(view.state.doc.child(1).type.name).toBe("paragraph");
+    expect(pressBackspace(view)).toBe(true);
+
+    expect(container.querySelector(".ProseMirror table")).toBeInTheDocument();
+    expect(view.state.doc.child(0).type.name).toBe("table");
+    expect(view.state.doc.child(1).type.name).toBe("image");
+    expect(view.state.selection.$from.parent.type.name).toBe("paragraph");
+    expect(view.state.selection.$from.parent.textContent).toBe("Editor");
+    expect(serializeMarkdown(view.state.doc)).toContain("| Markra | Editor |");
+  });
+
   it("renders GitHub-style alert blockquotes as callouts while preserving Markdown source", async () => {
     const source = "> [!NOTE]\n> Keep this in mind.";
     const { container, editor, view } = await renderEditor(source);
@@ -4714,6 +4811,45 @@ describe("MarkdownPaper editing", () => {
     expect(fireEvent.dragStart(imageNode!)).toBe(false);
   });
 
+  it("renders standalone images as top-level image nodes", async () => {
+    const { container, view } = await renderEditor("![Screenshot](assets/pasted-image.png)");
+    const image = container.querySelector<HTMLImageElement>('.ProseMirror img[src="assets/pasted-image.png"]');
+    const imageNode = image?.closest<HTMLElement>(".markra-image-node");
+
+    expect(view.state.doc.child(0).type.name).toBe("image");
+    expect(imageNode?.parentElement).toBe(container.querySelector(".ProseMirror"));
+  });
+
+  it("splits paragraph image markdown into block image nodes", async () => {
+    const { container, view } = await renderEditor("Before ![Screenshot](assets/pasted-image.png) after");
+    const image = container.querySelector<HTMLImageElement>('.ProseMirror img[src="assets/pasted-image.png"]');
+
+    expect(view.state.doc.childCount).toBe(3);
+    expect(view.state.doc.child(0).type.name).toBe("paragraph");
+    expect(view.state.doc.child(0).textContent).toBe("Before");
+    expect(view.state.doc.child(1).type.name).toBe("image");
+    expect(view.state.doc.child(2).type.name).toBe("paragraph");
+    expect(view.state.doc.child(2).textContent).toBe("after");
+    expect(image?.closest(".markra-image-node")?.parentElement).toBe(container.querySelector(".ProseMirror"));
+  });
+
+  it("keeps image markdown source stable when editing surrounding text", async () => {
+    const source = ["Intro", "", "![Screenshot](assets/pasted-image.png)", "", "Outro"].join("\n");
+    const onMarkdownChange = vi.fn();
+    const { editor, view } = await renderEditor(source, { onMarkdownChange });
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    const expectedMarkdown = ["Intro updated", "", "![Screenshot](assets/pasted-image.png)", "", "Outro", ""].join(
+      "\n"
+    );
+
+    moveCursor(view, findTextPosition(view, "Intro", "Intro".length));
+    typeText(view, " updated");
+    await settleMarkdownListener();
+
+    expect(serializeMarkdown(view.state.doc)).toBe(expectedMarkdown);
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
+  });
+
   it("shows finalized image markdown source when the image is clicked", async () => {
     const { container, editor, view } = await renderEditor("![Screenshot](assets/pasted-image.png)");
 
@@ -4727,6 +4863,7 @@ describe("MarkdownPaper editing", () => {
 
     const source = container.querySelector<HTMLInputElement>(".ProseMirror .markra-image-node-source");
     expect(source).toHaveValue("![Screenshot](assets/pasted-image.png)");
+    expect(image?.closest(".markra-image-node")).toHaveClass("markra-image-node-selected");
     expect(image?.closest(".markra-image-node")).not.toHaveClass("ProseMirror-selectednode");
 
     fireEvent.change(source!, { target: { value: "![Edited screenshot](assets/edited.png)" } });
@@ -4736,6 +4873,50 @@ describe("MarkdownPaper editing", () => {
 
     const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
     expect(serializeMarkdown(view.state.doc)).toContain("![Edited screenshot](assets/edited.png)");
+  });
+
+  it("moves from finalized image source editing to a new paragraph on Enter", async () => {
+    const { container, editor, view } = await renderEditor("![Screenshot](assets/pasted-image.png)");
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+
+    const image = container.querySelector<HTMLImageElement>('.ProseMirror img[src="assets/pasted-image.png"]');
+    expect(image).toBeInTheDocument();
+
+    expect(fireEvent.mouseDown(image!)).toBe(false);
+
+    const source = container.querySelector<HTMLInputElement>(".ProseMirror .markra-image-node-source");
+    expect(source).toHaveValue("![Screenshot](assets/pasted-image.png)");
+
+    expect(fireEvent.keyDown(source!, { key: "Enter" })).toBe(false);
+
+    expect(container.querySelector(".ProseMirror .markra-image-node-source")).not.toBeInTheDocument();
+    expect(view.state.doc.child(0).type.name).toBe("image");
+    expect(view.state.doc.child(1).type.name).toBe("paragraph");
+    expect(view.state.selection.$from.parent.type.name).toBe("paragraph");
+
+    typeText(view, "Next");
+
+    expect(serializeMarkdown(view.state.doc)).toBe("![Screenshot](assets/pasted-image.png)\n\nNext\n");
+  });
+
+  it("removes the image source Enter paragraph on Backspace", async () => {
+    const { container, view } = await renderEditor("![Screenshot](assets/pasted-image.png)");
+
+    const image = container.querySelector<HTMLImageElement>('.ProseMirror img[src="assets/pasted-image.png"]');
+    expect(image).toBeInTheDocument();
+
+    expect(fireEvent.mouseDown(image!)).toBe(false);
+
+    const source = container.querySelector<HTMLInputElement>(".ProseMirror .markra-image-node-source");
+    expect(source).toHaveValue("![Screenshot](assets/pasted-image.png)");
+    expect(fireEvent.keyDown(source!, { key: "Enter" })).toBe(false);
+
+    expect(view.state.doc.child(1).type.name).toBe("paragraph");
+    expect(pressBackspace(view)).toBe(true);
+
+    expect(view.state.doc.childCount).toBe(1);
+    expect(view.state.doc.child(0).type.name).toBe("image");
+    expect(view.state.selection).toBeInstanceOf(NodeSelection);
   });
 
   it("deletes a finalized image when its markdown source is cleared", async () => {

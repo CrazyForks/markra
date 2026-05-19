@@ -15,7 +15,7 @@ import { exitCode, lift, setBlockType, toggleMark, wrapIn } from "@milkdown/kit/
 import { redo, undo } from "@milkdown/kit/prose/history";
 import type { NodeType } from "@milkdown/kit/prose/model";
 import type { Command, Selection } from "@milkdown/kit/prose/state";
-import { Plugin, TextSelection } from "@milkdown/kit/prose/state";
+import { NodeSelection, Plugin, TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { liftListItem, sinkListItem, wrapInList } from "@milkdown/kit/prose/schema-list";
 import { $prose } from "@milkdown/kit/utils";
@@ -101,6 +101,92 @@ function selectionIsEmptyBlockquote(selection: Selection, blockquote: NodeType) 
   return selectionIsEmptyTextBlock(selection) && selectionIsInsideNodeType(selection, blockquote);
 }
 
+function emptyTopLevelParagraphAfterTable(view: EditorView, paragraph: NodeType) {
+  const { selection } = view.state;
+  if (!(selection instanceof TextSelection) || !selection.empty) return null;
+
+  const { $from } = selection;
+  if ($from.depth !== 1) return null;
+  if ($from.parent.type !== paragraph || $from.parent.content.size > 0 || $from.parentOffset !== 0) return null;
+
+  const index = $from.index(0);
+  if (index <= 0) return null;
+
+  const previousNode = view.state.doc.child(index - 1);
+  if (previousNode.type.name !== "table") return null;
+
+  const paragraphFrom = $from.before(1);
+  const paragraphTo = $from.after(1);
+  const tableFrom = paragraphFrom - previousNode.nodeSize;
+  let cursor: number | null = null;
+
+  previousNode.descendants((node, position) => {
+    if (!node.isTextblock) return true;
+
+    cursor = tableFrom + 1 + position + node.content.size;
+    return true;
+  });
+
+  if (cursor === null) return null;
+
+  return {
+    cursor,
+    paragraphFrom,
+    paragraphTo
+  };
+}
+
+function moveBackIntoTableFromEmptyParagraph(view: EditorView, paragraph: NodeType) {
+  const target = emptyTopLevelParagraphAfterTable(view, paragraph);
+  if (!target) return false;
+
+  const transaction = view.state.tr.delete(target.paragraphFrom, target.paragraphTo);
+  view.dispatch(
+    transaction
+      .setSelection(TextSelection.create(transaction.doc, transaction.mapping.map(target.cursor, -1)))
+      .scrollIntoView()
+  );
+  view.focus();
+  return true;
+}
+
+function emptyTopLevelParagraphAfterImage(view: EditorView, paragraph: NodeType) {
+  const { selection } = view.state;
+  if (!(selection instanceof TextSelection) || !selection.empty) return null;
+
+  const { $from } = selection;
+  if ($from.depth !== 1) return null;
+  if ($from.parent.type !== paragraph || $from.parent.content.size > 0 || $from.parentOffset !== 0) return null;
+
+  const index = $from.index(0);
+  if (index <= 0) return null;
+
+  const previousNode = view.state.doc.child(index - 1);
+  if (previousNode.type.name !== "image") return null;
+
+  const paragraphFrom = $from.before(1);
+
+  return {
+    imagePosition: paragraphFrom - previousNode.nodeSize,
+    paragraphFrom,
+    paragraphTo: $from.after(1)
+  };
+}
+
+function moveBackToImageFromEmptyParagraph(view: EditorView, paragraph: NodeType) {
+  const target = emptyTopLevelParagraphAfterImage(view, paragraph);
+  if (!target) return false;
+
+  const transaction = view.state.tr.delete(target.paragraphFrom, target.paragraphTo);
+  view.dispatch(
+    transaction
+      .setSelection(NodeSelection.create(transaction.doc, transaction.mapping.map(target.imagePosition, -1)))
+      .scrollIntoView()
+  );
+  view.focus();
+  return true;
+}
+
 const plainTextIndentation = "  ";
 
 function insertPlainTextIndentation(view: EditorView) {
@@ -156,6 +242,14 @@ export const markraMarkdownShortcuts = (configuredShortcuts: MarkdownShortcutMap
           return true;
         } else if (event.key === "Backspace" && !hasModifier && selectionIsEmptyBlockquote(view.state.selection, blockquote)) {
           const handled = runCommand(view, lift);
+          if (!handled) return false;
+
+          event.preventDefault();
+          return true;
+        } else if (event.key === "Backspace" && !hasModifier) {
+          const handled =
+            moveBackIntoTableFromEmptyParagraph(view, paragraph) ||
+            moveBackToImageFromEmptyParagraph(view, paragraph);
           if (!handled) return false;
 
           event.preventDefault();

@@ -1830,7 +1830,13 @@
   }
 
   .markdown-paper .markra-image-node.ProseMirror-selectednode {
-    @apply bg-transparent outline-none;
+    @apply bg-transparent;
+  }
+
+  .markdown-paper .markra-image-node.markra-image-node-selected,
+  .markdown-paper .markra-image-node.ProseMirror-selectednode {
+    outline: 2px solid #8cf;
+    outline-offset: 3px;
   }
 
   .markdown-paper .markra-image-node-source-row {
