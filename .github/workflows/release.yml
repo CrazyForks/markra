@@ -216,6 +216,38 @@ jobs:
           projectPath: ${{ env.DESKTOP_DIR }}
           args: ${{ matrix.args }} --config tauri.updater.conf.json
 
+      - name: Rebuild Linux AppImage library policy
+        if: matrix.os == 'ubuntu-22.04'
+        shell: bash
+        env:
+          APPIMAGE_APPDIR: ${{ env.DESKTOP_DIR }}/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/${{ env.APP_PRODUCT_NAME }}.AppDir
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          appimage_dir="$(dirname "${APPIMAGE_APPDIR}")"
+          appimage_path="$(find "${appimage_dir}" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+
+          if [[ -z "${appimage_path}" ]]; then
+            echo "No AppImage artifact found in ${appimage_dir}" >&2
+            exit 1
+          fi
+
+          node .release-scripts/scripts/release/repair-linux-appimage-libraries.mjs "${APPIMAGE_APPDIR}"
+          node .release-scripts/scripts/release/verify-linux-appimage-libraries.mjs "${APPIMAGE_APPDIR}"
+
+          rm -f "${appimage_path}.sig" "${appimage_path}.tar.gz" "${appimage_path}.tar.gz.sig"
+
+          appimagetool="${RUNNER_TEMP}/appimagetool-x86_64.AppImage"
+          curl -fsSL \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o "${appimagetool}"
+          chmod +x "${appimagetool}"
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "${appimagetool}" "${APPIMAGE_APPDIR}" "${appimage_path}"
+          "${DESKTOP_DIR}/node_modules/.bin/tauri" signer sign "${appimage_path}" > "${appimage_path}.sig"
+
       - name: Verify Linux AppImage library policy
         if: matrix.os == 'ubuntu-22.04'
         shell: bash

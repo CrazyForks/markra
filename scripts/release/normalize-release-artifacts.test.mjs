@@ -63,9 +63,14 @@ test("release workflow uses arm64 in Apple Silicon file names while keeping the 
 
 test("release workflow excludes Wayland client from Linux AppImage bundling", () => {
   const buildStep = readReleaseStep("Build and bundle app");
+  const rebuildStep = readReleaseStep("Rebuild Linux AppImage library policy");
   const verifyStep = readReleaseStep("Verify Linux AppImage library policy");
 
   assert.match(buildStep, /LINUXDEPLOY_EXCLUDED_LIBRARIES:\s*libwayland-client\.so\*/);
+  assert.match(rebuildStep, /if:\s*matrix\.os == 'ubuntu-22\.04'/);
+  assert.match(rebuildStep, /repair-linux-appimage-libraries\.mjs/);
+  assert.match(rebuildStep, /appimagetool-x86_64\.AppImage/);
+  assert.match(rebuildStep, /tauri" signer sign/);
   assert.match(verifyStep, /if:\s*matrix\.os == 'ubuntu-22\.04'/);
   assert.match(verifyStep, /verify-linux-appimage-libraries\.mjs/);
 });
