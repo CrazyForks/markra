@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { defaultMarkdownShortcuts } from "@markra/editor";
+import desktopPackage from "../package.json";
 import { defaultAiQuickActionPrompts } from "./lib/ai-actions";
 import {
   dispatchAiEditorPreviewAction,
@@ -532,6 +533,7 @@ describe("Markra workspace", () => {
     settingsGroups.forEach((group) => expect(group).not.toHaveClass("border-y"));
     expect(settingsGroups[0]).not.toHaveClass("divide-y");
     expect(settingsGroups.some((group) => group.classList.contains("divide-y"))).toBe(true);
+    expect(screen.getByText(`Markra ${desktopPackage.version}`)).toBeInTheDocument();
     const categoryButtons = Array.from(container.querySelectorAll(".settings-sidebar nav button"));
     expect(categoryButtons).toHaveLength(9);
     expect(categoryButtons[0]).toHaveAttribute("aria-current", "page");
