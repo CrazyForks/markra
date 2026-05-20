@@ -34,6 +34,46 @@ describe("document export helpers", () => {
     expect(html).toContain(".markdown-export {\n    max-width: none;\n    margin: 0;\n    padding: 0;\n  }");
   });
 
+  it("removes rendered pure LaTeX macro definition blocks from standalone documents", () => {
+    const html = buildMarkdownHtmlDocument({
+      bodyHtml: [
+        '<span class="markra-math-render markra-math-render-display">',
+        '<span class="katex"><span class="katex-mathml"><math><semantics>',
+        "<mrow></mrow>",
+        '<annotation encoding="application/x-tex">\\newcommand{\\RR}{\\mathbb{R}} \\newcommand{\\vect}[1]{\\mathbf{#1}}</annotation>',
+        "</semantics></math></span><span class=\"katex-html\"></span></span>",
+        "</span>",
+        "<p>The domain is rendered.</p>"
+      ].join(""),
+      title: "Macro export"
+    });
+
+    expect(html).not.toContain(String.raw`\newcommand`);
+    expect(html).toContain("<p>The domain is rendered.</p>");
+  });
+
+  it("removes inline LaTeX macro definition markers from standalone documents", () => {
+    const html = buildMarkdownHtmlDocument({
+      bodyHtml: [
+        '<p><span data-markra-math-macro-definition="" hidden=""></span></p>',
+        '<p>Text before ',
+        '<span class="markra-math-render markra-math-render-inline">',
+        '<span class="katex"><span class="katex-mathml"><math><semantics>',
+        "<mrow></mrow>",
+        '<annotation encoding="application/x-tex">\\newcommand{\\b}{\\mathbb{b}}</annotation>',
+        "</semantics></math></span><span class=\"katex-html\"></span></span>",
+        "</span>",
+        " text after.</p>"
+      ].join(""),
+      title: "Inline macro export"
+    });
+
+    expect(html).not.toContain(String.raw`\newcommand`);
+    expect(html).not.toContain("data-markra-math-macro-definition");
+    expect(html).not.toContain("<p></p>");
+    expect(html).toContain("<p>Text before  text after.</p>");
+  });
+
   it("creates file URLs for local export assets", () => {
     expect(localFileUrlFromPath("/Users/me/notes/assets/pasted image.png")).toBe(
       "file:///Users/me/notes/assets/pasted%20image.png"

@@ -1,4 +1,5 @@
 import katexStyles from "katex/dist/katex.css?raw";
+import { isMarkraMathMacroDefinitionSource } from "@markra/editor";
 
 export type ExportDocumentFormat = "html" | "pdf";
 
@@ -337,6 +338,57 @@ function escapeHtmlText(text: string) {
     .replace(/"/gu, "&quot;");
 }
 
+function renderedMathAnnotationSource(element: Element) {
+  return element.querySelector('annotation[encoding="application/x-tex"]')?.textContent ?? "";
+}
+
+function removeRenderedMathElement(element: Element) {
+  const parent = element.parentElement;
+  element.remove();
+
+  if (!parent || (parent.tagName !== "P" && parent.tagName !== "PRE")) return;
+  if (parent.textContent?.trim()) return;
+  if (parent.querySelector("img, svg, table, code, .markra-math-render, .markra-mermaid-render")) return;
+
+  parent.remove();
+}
+
+function removeRenderedMathMacroDefinitionMarkers(bodyHtml: string) {
+  if (!bodyHtml.includes("data-markra-math-macro-definition")) return bodyHtml;
+  if (typeof document === "undefined") return bodyHtml;
+
+  const template = document.createElement("template");
+  template.innerHTML = bodyHtml;
+
+  for (const marker of Array.from(template.content.querySelectorAll("[data-markra-math-macro-definition]"))) {
+    removeRenderedMathElement(marker);
+  }
+
+  return template.innerHTML;
+}
+
+function removeRenderedMathMacroDefinitions(bodyHtml: string) {
+  if (
+    !bodyHtml.includes("markra-math-render") ||
+    !/\\(?:newcommand|renewcommand|providecommand)/u.test(bodyHtml)
+  ) {
+    return bodyHtml;
+  }
+  if (typeof document === "undefined") return bodyHtml;
+
+  const template = document.createElement("template");
+  template.innerHTML = bodyHtml;
+
+  for (const mathElement of Array.from(template.content.querySelectorAll(".markra-math-render"))) {
+    const source = renderedMathAnnotationSource(mathElement);
+    if (!isMarkraMathMacroDefinitionSource(source)) continue;
+
+    removeRenderedMathElement(mathElement);
+  }
+
+  return template.innerHTML;
+}
+
 function encodeFileUrlPath(path: string) {
   return path
     .split("/")
@@ -382,6 +434,7 @@ export function buildMarkdownHtmlDocument({
   const escapedAuthor = escapeHtmlText(pdfAuthor?.trim() ?? "");
   const escapedFooter = escapeHtmlText(pdfFooter?.trim() ?? "");
   const escapedHeader = escapeHtmlText(pdfHeader?.trim() ?? "");
+  const exportBodyHtml = removeRenderedMathMacroDefinitions(removeRenderedMathMacroDefinitionMarkers(bodyHtml));
   const documentStyles = styles ?? createMarkdownExportStyles({
     pdfFooter,
     pdfHeader,
@@ -407,7 +460,7 @@ export function buildMarkdownHtmlDocument({
     ...(escapedHeader ? [`<header class="markdown-export-page-header">${escapedHeader}</header>`] : []),
     ...(escapedFooter ? [`<footer class="markdown-export-page-footer">${escapedFooter}</footer>`] : []),
     '<main class="markdown-export">',
-    bodyHtml,
+    exportBodyHtml,
     "</main>",
     "</body>",
     "</html>"

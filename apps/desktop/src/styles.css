@@ -2014,6 +2014,33 @@
     opacity: 0.96;
   }
 
+  .markdown-paper .markra-math-macro-fold {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--editor-border) 72%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--editor-text-primary) 4%, transparent);
+    color: var(--editor-text-secondary);
+    cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.72em;
+    line-height: 1.45;
+    padding: 0.08rem 0.42rem;
+    user-select: none;
+    vertical-align: 0.08em;
+  }
+
+  .markdown-paper .markra-math-macro-fold:hover {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--editor-border));
+    color: var(--editor-text-primary);
+  }
+
+  .markdown-paper .markra-math-macro-fold:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 64%, transparent);
+    outline-offset: 2px;
+  }
+
   .markdown-paper strong {
     @apply text-(--text-heading) font-[760];
   }

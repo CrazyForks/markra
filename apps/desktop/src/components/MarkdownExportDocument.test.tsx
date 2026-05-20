@@ -59,6 +59,39 @@ describe("MarkdownExportDocument", () => {
     expect(bodyHtml).not.toContain("language-math");
   });
 
+  it("applies display math macro definitions before exporting HTML", async () => {
+    const onRendered = vi.fn();
+
+    render(
+      <MarkdownExportDocument
+        onRendered={onRendered}
+        snapshot={{
+          id: 1,
+          kind: "html",
+          markdown: [
+            "$$",
+            String.raw`\newcommand{\RR}{\mathbb{R}}`,
+            String.raw`\newcommand{\vect}[1]{\mathbf{#1}}`,
+            "$$",
+            "",
+            String.raw`The domain is $\RR$.`,
+            "",
+            String.raw`Vector $\vect{x}$.`
+          ].join("\n"),
+          title: "macro-math.md"
+        }}
+      />
+    );
+
+    await waitFor(() => expect(onRendered).toHaveBeenCalledTimes(1));
+
+    const bodyHtml = onRendered.mock.calls[0]?.[0].bodyHtml as string;
+    expect(bodyHtml).toContain('class="mord mathbb">R</span>');
+    expect(bodyHtml).toContain('class="mord mathbf">x</span>');
+    expect(bodyHtml).not.toContain(String.raw`\newcommand`);
+    expect(bodyHtml).not.toContain('style="color:#cc0000;">\\RR');
+  });
+
   it("renders Mermaid code blocks before exporting HTML", async () => {
     const onRendered = vi.fn();
 

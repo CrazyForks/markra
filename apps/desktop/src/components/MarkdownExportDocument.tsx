@@ -1,10 +1,17 @@
 import { Children, cloneElement, isValidElement, useEffect, useRef, type ReactElement, type ReactNode } from "react";
-import { renderToString } from "katex";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { isMermaidLanguage, mermaidThemeFromElement, renderMermaidToSvg } from "@markra/editor";
+import {
+  createMarkraMathMacros,
+  isMarkraMathMacroDefinitionSource,
+  isMermaidLanguage,
+  mermaidThemeFromElement,
+  renderMarkraMathToString,
+  renderMermaidToSvg,
+  type MarkraMathMacros
+} from "@markra/editor";
 import { parseMarkdownCalloutMarker, type ParsedMarkdownCalloutMarker } from "@markra/shared";
 import type { ExportDocumentFormat } from "../lib/document-export";
 
@@ -38,13 +45,15 @@ function hasMathClass(className: unknown, kind: "display" | "inline") {
   return typeof className === "string" && className.split(/\s+/u).includes(`math-${kind}`);
 }
 
-function renderMathSource(source: string, kind: "display" | "inline") {
-  const html = renderToString(source, {
-    displayMode: kind === "display",
-    output: "htmlAndMathml",
-    strict: "ignore",
-    throwOnError: false
-  });
+function isMathMacroDefinitionMarker(child: ReactNode) {
+  return isValidElement<Record<string, unknown>>(child) && child.props["data-markra-math-macro-definition"] === "";
+}
+
+function renderMathSource(source: string, kind: "display" | "inline", macros: MarkraMathMacros) {
+  const html = renderMarkraMathToString(source, kind, macros);
+  if (isMarkraMathMacroDefinitionSource(source)) {
+    return <span data-markra-math-macro-definition="" hidden />;
+  }
 
   return (
     <span
@@ -218,6 +227,8 @@ export function MarkdownExportDocument({
 
   if (!snapshot) return null;
 
+  const mathMacros = createMarkraMathMacros();
+
   return (
     <section
       aria-hidden="true"
@@ -232,11 +243,11 @@ export function MarkdownExportDocument({
             blockquote: ({ node: _node, ...props }) => renderCalloutBlockquote(props),
             code: ({ node: _node, className, children, ...props }) => {
               if (hasMathClass(className, "inline")) {
-                return renderMathSource(childrenToText(children), "inline");
+                return renderMathSource(childrenToText(children), "inline", mathMacros);
               }
 
               if (hasMathClass(className, "display")) {
-                return renderMathSource(childrenToText(children), "display");
+                return renderMathSource(childrenToText(children), "display", mathMacros);
               }
 
               return <code {...props} className={className}>{children}</code>;
@@ -250,6 +261,7 @@ export function MarkdownExportDocument({
             ),
             pre: ({ node: _node, children, ...props }) => {
               const onlyChild = Children.toArray(children)[0];
+              if (isMathMacroDefinitionMarker(onlyChild)) return null;
               if (
                 isValidElement<{ className?: string }>(onlyChild) &&
                 hasMathClass(onlyChild.props.className, "display")

@@ -1062,6 +1062,28 @@ describe("MarkdownPaper editing", () => {
     expect(serializeMarkdown(view.state.doc)).toContain("Where $A$ is the final amount.");
   });
 
+  it("applies display math macro definitions to later formulas", async () => {
+    const macroDefinition = ["$$", String.raw`\newcommand{\RR}{\mathbb{R}}`, "$$"].join("\n");
+    const source = [macroDefinition, "", String.raw`The domain is $\RR$.`].join("\n");
+    const { container } = await renderEditor(source);
+
+    const inlineFormula = container.querySelector<HTMLElement>(".ProseMirror .markra-math-render-inline");
+    const macroFold = container.querySelector<HTMLElement>(".ProseMirror .markra-math-macro-fold");
+
+    expect(inlineFormula).toBeInTheDocument();
+    expect(inlineFormula?.querySelector(".mathbb")).toHaveTextContent("R");
+    expect(macroFold).toBeInTheDocument();
+    expect(macroFold).toHaveTextContent(String.raw`\newcommand`);
+    expect(container.querySelector(".ProseMirror .markra-math-render-display")).not.toBeInTheDocument();
+
+    macroFold?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+
+    const activeMacroSource = Array.from(container.querySelectorAll(".ProseMirror .markra-math-source-active-display"))
+      .map((node) => node.textContent)
+      .join("");
+    expect(activeMacroSource).toContain(String.raw`\newcommand{\RR}{\mathbb{R}}`);
+  });
+
   it("renders multiline display math without treating minus-led rows as lists", async () => {
     const source = [
       "$$",
@@ -1082,6 +1104,21 @@ describe("MarkdownPaper editing", () => {
 
     const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
     expect(serializeMarkdown(view.state.doc)).toContain(source);
+  });
+
+  it("renders multiline display math when typed directly", async () => {
+    const { container, editor, view } = await renderEditor();
+
+    typeText(view, "$$");
+    expect(pressEnter(view)).toBe(true);
+    typeText(view, String.raw`\int_0^1 x^2 \, dx`);
+    expect(pressEnter(view)).toBe(true);
+    typeText(view, "$$");
+
+    expect(container.querySelector(".ProseMirror .markra-math-render-display .katex")).toBeInTheDocument();
+
+    const serializeMarkdown = editor.action((ctx) => ctx.get(serializerCtx));
+    expect(serializeMarkdown(view.state.doc)).toContain(["$$", String.raw`\int_0^1 x^2 \, dx`, "$$"].join("\n"));
   });
 
   it("renders ordinary paragraph line breaks without requiring explicit br tags", async () => {

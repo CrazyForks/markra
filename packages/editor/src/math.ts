@@ -3,14 +3,17 @@ import { Plugin, PluginKey, TextSelection, type EditorState } from "@milkdown/ki
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
 import type { MarkdownNode } from "@milkdown/kit/transformer";
 import { $prose, $remark } from "@milkdown/kit/utils";
-import { renderToString } from "katex";
+import { renderToString, type KatexOptions } from "katex";
 import remarkMath from "remark-math";
 
-type MathRangeKind = "display" | "inline";
+export type MarkraMathKind = "display" | "inline";
+export type MarkraMathMacros = NonNullable<KatexOptions["macros"]>;
 
 type MathRange = {
   from: number;
-  kind: MathRangeKind;
+  isMacroDefinitionOnly?: boolean;
+  kind: MarkraMathKind;
+  renderedHtml?: string;
   source: string;
   tex: string;
   to: number;
@@ -33,6 +36,120 @@ type MathRenderMeta =
 const mathRenderKey = new PluginKey<ActiveMathSource | null>("markra-math-render");
 const transparentCaretAnchorSrc =
   "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%221%22%20height=%221%22%20viewBox=%220%200%201%201%22/%3E";
+
+export function createMarkraMathMacros(): MarkraMathMacros {
+  return {};
+}
+
+export function renderMarkraMathToString(tex: string, kind: MarkraMathKind, macros = createMarkraMathMacros()) {
+  return renderToString(tex, {
+    displayMode: kind === "display",
+    globalGroup: true,
+    macros,
+    output: "htmlAndMathml",
+    strict: "ignore",
+    throwOnError: false
+  });
+}
+
+function skipMathWhitespace(source: string, index: number) {
+  let cursor = index;
+  while (cursor < source.length && /\s/u.test(source[cursor] ?? "")) cursor += 1;
+  return cursor;
+}
+
+function readMathCommand(source: string, index: number) {
+  if (source[index] !== "\\") return null;
+
+  let cursor = index + 1;
+  while (cursor < source.length && /[a-zA-Z]/u.test(source[cursor] ?? "")) cursor += 1;
+  if (cursor === index + 1 && cursor < source.length) cursor += 1;
+
+  return {
+    command: source.slice(index, cursor),
+    to: cursor
+  };
+}
+
+function readBalancedMathGroup(source: string, index: number, open: "{" | "[", close: "}" | "]") {
+  if (source[index] !== open) return null;
+
+  let depth = 0;
+  for (let cursor = index; cursor < source.length; cursor += 1) {
+    const character = source[cursor];
+    if (character === open && !isEscaped(source, cursor)) {
+      depth += 1;
+      continue;
+    }
+
+    if (character !== close || isEscaped(source, cursor)) continue;
+
+    depth -= 1;
+    if (depth === 0) return cursor + 1;
+  }
+
+  return null;
+}
+
+function readMathMacroNameArgument(source: string, index: number) {
+  const cursor = skipMathWhitespace(source, index);
+  if (source[cursor] === "{") {
+    const groupEnd = readBalancedMathGroup(source, cursor, "{", "}");
+    return groupEnd === null ? null : groupEnd;
+  }
+
+  return readMathCommand(source, cursor)?.to ?? null;
+}
+
+function readOptionalMathMacroArgument(source: string, index: number) {
+  const cursor = skipMathWhitespace(source, index);
+  if (source[cursor] !== "[") return index;
+
+  return readBalancedMathGroup(source, cursor, "[", "]");
+}
+
+function readRequiredMathMacroReplacement(source: string, index: number) {
+  const cursor = skipMathWhitespace(source, index);
+  return readBalancedMathGroup(source, cursor, "{", "}");
+}
+
+function readNewcommandDefinition(source: string, index: number) {
+  const command = readMathCommand(source, index);
+  if (!command || !["\\newcommand", "\\renewcommand", "\\providecommand"].includes(command.command)) return null;
+
+  let cursor = skipMathWhitespace(source, command.to);
+  if (source[cursor] === "*") cursor += 1;
+
+  const macroNameEnd = readMathMacroNameArgument(source, cursor);
+  if (macroNameEnd === null) return null;
+
+  cursor = macroNameEnd;
+
+  const argumentCountEnd = readOptionalMathMacroArgument(source, cursor);
+  if (argumentCountEnd === null) return null;
+  cursor = argumentCountEnd;
+
+  const optionalDefaultEnd = readOptionalMathMacroArgument(source, cursor);
+  if (optionalDefaultEnd === null) return null;
+  cursor = optionalDefaultEnd;
+
+  return readRequiredMathMacroReplacement(source, cursor);
+}
+
+export function isMarkraMathMacroDefinitionSource(tex: string) {
+  let cursor = skipMathWhitespace(tex, 0);
+  let foundDefinition = false;
+
+  while (cursor < tex.length) {
+    const nextCursor = readNewcommandDefinition(tex, cursor);
+    if (nextCursor === null) return false;
+
+    foundDefinition = true;
+    cursor = skipMathWhitespace(tex, nextCursor);
+  }
+
+  return foundDefinition;
+}
 
 type MarkdownPosition = {
   end?: {
@@ -400,13 +517,21 @@ function findNextDisplayMathBlock(state: EditorState): MathRange | null {
   return nextBlockMathRange;
 }
 
-function renderFormula(range: MathRange) {
-  return renderToString(range.tex, {
-    displayMode: range.kind === "display",
-    output: "htmlAndMathml",
-    strict: "ignore",
-    throwOnError: false
-  });
+function renderFormula(range: MathRange, macros?: MarkraMathMacros) {
+  return renderMarkraMathToString(range.tex, range.kind, macros);
+}
+
+function renderMathRange(range: MathRange, macros: MarkraMathMacros): MathRange {
+  try {
+    const renderedHtml = renderFormula(range, macros);
+    return {
+      ...range,
+      isMacroDefinitionOnly: isMarkraMathMacroDefinitionSource(range.tex) && !renderedHtml.includes("#cc0000"),
+      renderedHtml
+    };
+  } catch {
+    return range;
+  }
 }
 
 function mathSourceEditPosition(range: MathRange) {
@@ -434,6 +559,37 @@ function revealMathSource(view: EditorView, range: MathRange) {
 
 function isPlainEnter(event: KeyboardEvent) {
   return event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
+}
+
+function unclosedDisplayMathSourceBeforeCursor(state: EditorState) {
+  const { selection } = state;
+  if (!(selection instanceof TextSelection) || !selection.empty) return null;
+
+  const { $from } = selection;
+  if (!$from.parent.isTextblock || $from.parent.type.spec.code) return null;
+
+  const textBeforeCursor = $from.parent.textBetween(0, $from.parentOffset, "\n", "\n");
+  const openingMatch = /^\s*\$\$(?!\$)/u.exec(textBeforeCursor);
+  if (!openingMatch) return null;
+
+  const openingIndex = openingMatch[0].lastIndexOf("$$");
+  const closingIndex = findClosingDelimiter(textBeforeCursor, "$$", openingIndex + 2);
+  if (closingIndex !== -1) return null;
+
+  return textBeforeCursor;
+}
+
+function insertUnclosedDisplayMathSourceNewline(view: EditorView, event: KeyboardEvent) {
+  if (!isPlainEnter(event)) return false;
+  if (unclosedDisplayMathSourceBeforeCursor(view.state) === null) return false;
+
+  const hardbreak = view.state.schema.nodes.hardbreak;
+  if (!hardbreak) return false;
+
+  event.preventDefault();
+  view.dispatch(view.state.tr.replaceSelectionWith(hardbreak.create()).scrollIntoView());
+  view.focus();
+  return true;
 }
 
 function insertDisplayMathSourceNewline(view: EditorView, event: KeyboardEvent) {
@@ -567,6 +723,7 @@ function handleMathKeyDown(view: EditorView, event: KeyboardEvent) {
     moveDownToDisplayMath(view, event) ||
     moveDisplayMathSourceLineBoundary(view, event) ||
     insertDisplayMathSourceNewline(view, event) ||
+    insertUnclosedDisplayMathSourceNewline(view, event) ||
     closeActiveMathSource(view, event) ||
     deleteAdjacentMathSource(view, event)
   );
@@ -668,11 +825,45 @@ function createMathWidget(range: MathRange, activePreview = false) {
     }
 
     try {
-      element.innerHTML = renderFormula(range);
+      element.innerHTML = range.renderedHtml ?? renderFormula(range);
     } catch {
       element.classList.add("markra-math-render-invalid");
       element.textContent = range.source;
     }
+
+    return element;
+  };
+}
+
+function createMathMacroDefinitionFoldWidget(range: MathRange) {
+  return (view: EditorView) => {
+    const element = view.dom.ownerDocument.createElement("span");
+    element.className = "markra-math-macro-fold";
+    element.setAttribute("aria-expanded", "false");
+    element.setAttribute("aria-label", "LaTeX macro definitions");
+    element.setAttribute("role", "button");
+    element.tabIndex = 0;
+    element.textContent = String.raw`\newcommand`;
+
+    element.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      revealMathSource(view, range);
+    });
+    element.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        event.stopPropagation();
+        deleteMathRange(view, range);
+        return;
+      }
+
+      if (event.key !== "Enter" && event.key !== " ") return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      revealMathSource(view, range);
+    });
 
     return element;
   };
@@ -733,13 +924,14 @@ function createMathCaretAnchorDecoration(range: MathRange) {
 function buildMathDecorations(state: EditorState, activeRange: MathRange | null) {
   const { doc } = state;
   const decorations: Decoration[] = [];
+  const macros = createMarkraMathMacros();
 
   doc.descendants((node, position) => {
     if (!node.isTextblock || node.type.spec.code) return;
 
     const blockStart = position + 1;
     for (const relativeRange of getMathRanges(node.textContent)) {
-      const range = makeAbsoluteRange(relativeRange, blockStart);
+      const range = renderMathRange(makeAbsoluteRange(relativeRange, blockStart), macros);
       const isActive = activeRange?.from === range.from && activeRange.to === range.to;
       decorations.push(
         Decoration.inline(range.from, range.to, {
@@ -763,7 +955,7 @@ function buildMathDecorations(state: EditorState, activeRange: MathRange | null)
       if (isActive) {
         decorations.push(...activeMathTokenDecorations(range));
 
-        if (range.kind === "display") {
+        if (range.kind === "display" && !range.isMacroDefinitionOnly) {
           decorations.push(
             Decoration.widget(range.to, createMathWidget(range, true), {
               ignoreSelection: true,
@@ -772,6 +964,14 @@ function buildMathDecorations(state: EditorState, activeRange: MathRange | null)
             })
           );
         }
+      } else if (range.isMacroDefinitionOnly) {
+        decorations.push(
+          Decoration.widget(range.from, createMathMacroDefinitionFoldWidget(range), {
+            ignoreSelection: true,
+            key: `markra-math-macro-fold-${range.from}-${range.to}`,
+            side: -1
+          })
+        );
       } else {
         decorations.push(
           Decoration.widget(range.from, createMathWidget(range), {
