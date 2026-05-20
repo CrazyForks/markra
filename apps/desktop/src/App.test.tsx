@@ -3314,6 +3314,29 @@ describe("Markra workspace", () => {
     expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument();
   });
 
+  it("prevents visual table controls from editing after read-only mode is toggled", async () => {
+    mockOpenMarkdownFile({
+      content: ["| Field | Value |", "| --- | --- |", "| Name | Markra |"].join("\n"),
+      name: "table.md",
+      path: mockNativePath
+    });
+    const { container } = renderApp();
+
+    fireEvent.keyDown(window, { key: "o", metaKey: true });
+    await waitFor(() => expect(container.querySelector(".ProseMirror table")).toBeInTheDocument());
+    const rowCount = () => container.querySelectorAll(".ProseMirror table tr").length;
+
+    expect(rowCount()).toBe(2);
+
+    fireEvent.keyDown(window, { key: "l", altKey: true, metaKey: true });
+    expect(container.querySelector(".ProseMirror")).toHaveAttribute("contenteditable", "false");
+
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Add row below" }));
+
+    expect(rowCount()).toBe(2);
+    expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument();
+  });
+
   it("keeps a clean file unmodified when toggling markdown source mode without edits", async () => {
     const originalContent = "Native file\n===========\n\nOpened from disk.";
     mockOpenMarkdownFile({
