@@ -49,6 +49,7 @@ type MarkdownFileTreeDrawerProps = {
   onCreateFolder?: (folderName: string, parentPath?: string | null) => unknown | Promise<unknown>;
   onDeleteFile?: (file: NativeMarkdownFolderFile) => unknown | Promise<unknown>;
   onOpenFile: (file: NativeMarkdownFolderFile) => unknown | Promise<unknown>;
+  onOpenFileToSide?: (file: NativeMarkdownFolderFile) => unknown | Promise<unknown>;
   onOpenRecentFolder?: (folder: RecentMarkdownFolder) => unknown | Promise<unknown>;
   onOpenSettings?: () => unknown | Promise<unknown>;
   onRemoveRecentFolder?: (folder: RecentMarkdownFolder) => unknown | Promise<unknown>;
@@ -243,6 +244,7 @@ export function MarkdownFileTreeDrawer({
   onCreateFolder,
   onDeleteFile,
   onOpenFile,
+  onOpenFileToSide,
   onOpenRecentFolder,
   onOpenSettings = () => {},
   onRemoveRecentFolder,
@@ -460,6 +462,7 @@ export function MarkdownFileTreeDrawer({
         deleteFile: (targetFile) => {
           onDeleteFile?.(targetFile);
         },
+        openFileToSide: onOpenFileToSide,
         renameFile: startRenamingFile
       },
       language,
