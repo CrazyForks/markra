@@ -278,7 +278,8 @@ describe("Markra workspace", () => {
       filePath: mockNativePath,
       fileTreeOpen: false,
       folderName: null,
-      folderPath: null
+      folderPath: null,
+      openFilePaths: [mockNativePath]
     });
     mockedReadNativeMarkdownFile.mockResolvedValue({
       content: "# Restored file\n\nBack from last launch.",
@@ -301,7 +302,8 @@ describe("Markra workspace", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: mockFolderPath
+      folderPath: mockFolderPath,
+      openFilePaths: []
     });
     mockedListNativeMarkdownFilesForPath.mockResolvedValue([
       { name: "index.md", path: "/mock-files/vault/index.md", relativePath: "index.md" },
@@ -330,7 +332,8 @@ describe("Markra workspace", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "deleted-notes",
-      folderPath: "/mock-files/deleted-notes"
+      folderPath: "/mock-files/deleted-notes",
+      openFilePaths: []
     });
     mockedListNativeMarkdownFilesForPath.mockRejectedValue(new Error("Markdown folder no longer exists"));
 
@@ -353,7 +356,8 @@ describe("Markra workspace", () => {
       filePath: nestedFilePath,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: mockFolderPath
+      folderPath: mockFolderPath,
+      openFilePaths: [nestedFilePath]
     });
     mockedListNativeMarkdownFilesForPath.mockResolvedValue([
       { name: "a.md", path: nestedFilePath, relativePath: "docs/deep/a.md" }
@@ -1147,7 +1151,8 @@ describe("Markra workspace", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: mockFolderPath
+      folderPath: mockFolderPath,
+      openFilePaths: []
     });
   });
 
@@ -1180,7 +1185,8 @@ describe("Markra workspace", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "notes",
-      folderPath: "/mock-files/notes"
+      folderPath: "/mock-files/notes",
+      openFilePaths: []
     });
   });
 
@@ -1396,7 +1402,10 @@ describe("Markra workspace", () => {
     expect(screen.queryByText("Native file")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "mock-files" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Markdown" })).toBeDisabled();
-    expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({ filePath: null });
+    expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({
+      filePath: null,
+      openFilePaths: []
+    });
   });
 
   it("previews an image asset from the current folder tree and returns to markdown files", async () => {
@@ -2412,7 +2421,8 @@ describe("Markra workspace", () => {
       filePath: mockNativePath,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: mockFolderPath
+      folderPath: mockFolderPath,
+      openFilePaths: [mockNativePath]
     });
     mockedListNativeMarkdownFilesForPath.mockResolvedValue([
       { name: "native.md", path: mockNativePath, relativePath: "native.md" }

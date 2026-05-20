@@ -802,7 +802,13 @@ describe("app settings", () => {
       filePath: "/mock-files/vault/README.md",
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: "/mock-files/vault"
+      folderPath: "/mock-files/vault",
+      openFilePaths: [
+        "/mock-files/vault/notes.md",
+        " ",
+        "/mock-files/vault/README.md",
+        "/mock-files/vault/notes.md"
+      ]
     });
 
     await expect(getStoredWorkspaceState()).resolves.toEqual({
@@ -810,7 +816,11 @@ describe("app settings", () => {
       filePath: "/mock-files/vault/README.md",
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: "/mock-files/vault"
+      folderPath: "/mock-files/vault",
+      openFilePaths: [
+        "/mock-files/vault/notes.md",
+        "/mock-files/vault/README.md"
+      ]
     });
 
     expect(store.get).toHaveBeenCalledWith("workspace");
@@ -822,11 +832,16 @@ describe("app settings", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: "/mock-files/vault"
+      folderPath: "/mock-files/vault",
+      openFilePaths: ["/mock-files/vault/notes.md"]
     });
 
     await saveStoredWorkspaceState({
-      filePath: "/mock-files/vault/README.md"
+      filePath: "/mock-files/vault/README.md",
+      openFilePaths: [
+        "/mock-files/vault/README.md",
+        "/mock-files/vault/notes.md"
+      ]
     });
 
     expect(store.set).toHaveBeenCalledWith("workspace", {
@@ -834,7 +849,11 @@ describe("app settings", () => {
       filePath: "/mock-files/vault/README.md",
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: "/mock-files/vault"
+      folderPath: "/mock-files/vault",
+      openFilePaths: [
+        "/mock-files/vault/README.md",
+        "/mock-files/vault/notes.md"
+      ]
     });
     expect(store.save).toHaveBeenCalledTimes(1);
   });

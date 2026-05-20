@@ -142,7 +142,7 @@ export function useMarkdownFileTree({ onWorkspaceSessionChange }: UseMarkdownFil
     // Opening a folder replaces the startup workspace, so clear the previous file path in the same write.
     persistWorkspaceState({
       aiAgentSessionId: sessionId,
-      ...(clearFilePath ? { filePath: null } : {}),
+      ...(clearFilePath ? { filePath: null, openFilePaths: [] } : {}),
       fileTreeOpen: true,
       folderName,
       folderPath: path

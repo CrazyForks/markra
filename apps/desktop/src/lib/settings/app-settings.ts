@@ -137,6 +137,7 @@ export type StoredWorkspaceState = {
   fileTreeOpen: boolean;
   folderName: string | null;
   folderPath: string | null;
+  openFilePaths: string[];
 };
 export type RecentMarkdownFolder = {
   name: string;
@@ -278,7 +279,8 @@ export const defaultWorkspaceState: StoredWorkspaceState = {
   filePath: null,
   fileTreeOpen: false,
   folderName: null,
-  folderPath: null
+  folderPath: null,
+  openFilePaths: []
 };
 
 function loadSettingsStore() {
@@ -1097,8 +1099,26 @@ export function normalizeWorkspaceState(value: unknown): StoredWorkspaceState {
     filePath: normalizeNullableString(workspace.filePath),
     fileTreeOpen: typeof workspace.fileTreeOpen === "boolean" ? workspace.fileTreeOpen : false,
     folderName: normalizeNullableString(workspace.folderName),
-    folderPath: normalizeNullableString(workspace.folderPath)
+    folderPath: normalizeNullableString(workspace.folderPath),
+    openFilePaths: normalizeWorkspaceOpenFilePaths(workspace.openFilePaths)
   };
+}
+
+function normalizeWorkspaceOpenFilePaths(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  const seenPaths = new Set<string>();
+  const paths: string[] = [];
+
+  value.forEach((item) => {
+    const path = normalizeNullableString(item);
+    if (!path || seenPaths.has(path)) return;
+
+    seenPaths.add(path);
+    paths.push(path);
+  });
+
+  return paths;
 }
 
 function aiAgentSessionStorePath(sessionId: string | null) {

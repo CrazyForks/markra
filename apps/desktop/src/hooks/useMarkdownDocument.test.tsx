@@ -51,7 +51,8 @@ describe("useMarkdownDocument", () => {
       filePath: null,
       fileTreeOpen: false,
       folderName: null,
-      folderPath: null
+      folderPath: null,
+      openFilePaths: []
     });
     mockedSaveStoredWorkspaceState.mockResolvedValue(undefined);
   });
@@ -608,7 +609,8 @@ describe("useMarkdownDocument", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "notes",
-      folderPath: "/mock-files/deleted-notes"
+      folderPath: "/mock-files/deleted-notes",
+      openFilePaths: []
     });
 
     const { result } = renderHook(() =>
@@ -633,7 +635,8 @@ describe("useMarkdownDocument", () => {
       expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({
         fileTreeOpen: false,
         folderName: null,
-        folderPath: null
+        folderPath: null,
+        openFilePaths: []
       })
     );
     expect(result.current.document).toMatchObject({
@@ -643,6 +646,110 @@ describe("useMarkdownDocument", () => {
       open: true,
       path: null
     });
+    expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
+  });
+
+  it("does not restore document tabs from a deleted folder workspace", async () => {
+    const guidePath = "/mock-files/deleted-notes/guide.md";
+    const notesPath = "/mock-files/deleted-notes/notes.md";
+    const onTreeRootFromFolderPath = vi.fn(async () => null);
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: "session-deleted-folder-tabs",
+      filePath: notesPath,
+      fileTreeOpen: true,
+      folderName: "deleted-notes",
+      folderPath: "/mock-files/deleted-notes",
+      openFilePaths: [guidePath, notesPath]
+    });
+    mockedReadNativeMarkdownFile.mockRejectedValue(new Error("Markdown file no longer exists"));
+
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        documentTabsEnabled: true,
+        getCurrentMarkdown: (fallbackContent) => fallbackContent,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath,
+        preferencesReady: true,
+        restoreWorkspaceOnStartup: true
+      })
+    );
+
+    await waitFor(() =>
+      expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({
+        fileTreeOpen: false,
+        folderName: null,
+        folderPath: null,
+        openFilePaths: []
+      })
+    );
+
+    expect(mockedReadNativeMarkdownFile).not.toHaveBeenCalled();
+    expect(result.current.tabs).toEqual([expect.objectContaining({
+      name: "Untitled.md",
+      path: null
+    })]);
+    expect(result.current.document).toMatchObject({
+      content: "",
+      dirty: false,
+      name: "Untitled.md",
+      open: true,
+      path: null
+    });
+  });
+
+  it("restores open markdown document tabs from the last workspace", async () => {
+    const guidePath = "/mock-files/vault/guide.md";
+    const notesPath = "/mock-files/vault/notes.md";
+    const onTreeRootFromFolderPath = vi.fn(async () => ({ name: "vault", path: "/mock-files/vault" }));
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: "session-tabs",
+      filePath: notesPath,
+      fileTreeOpen: true,
+      folderName: "vault",
+      folderPath: "/mock-files/vault",
+      openFilePaths: [guidePath, notesPath]
+    });
+    mockedReadNativeMarkdownFile.mockImplementation(async (path) => {
+      if (path === guidePath) {
+        return {
+          content: "# Guide",
+          name: "guide.md",
+          path
+        };
+      }
+
+      return {
+        content: "# Notes",
+        name: "notes.md",
+        path
+      };
+    });
+
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        documentTabsEnabled: true,
+        getCurrentMarkdown: (fallbackContent) => fallbackContent,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath,
+        preferencesReady: true,
+        restoreWorkspaceOnStartup: true
+      })
+    );
+
+    await waitFor(() => expect(result.current.tabs.map((tab) => tab.name)).toEqual(["guide.md", "notes.md"]));
+
+    expect(result.current.document).toMatchObject({
+      content: "# Notes",
+      dirty: false,
+      name: "notes.md",
+      open: true,
+      path: notesPath
+    });
+    expect(result.current.tabs.map((tab) => tab.path)).toEqual([guidePath, notesPath]);
+    expect(result.current.activeTabId).toBe(`file:${notesPath}`);
+    expect(onTreeRootFromFolderPath).toHaveBeenCalledWith("/mock-files/vault", "vault", "session-tabs", false);
+    expect(mockedReadNativeMarkdownFile).toHaveBeenCalledWith(guidePath);
+    expect(mockedReadNativeMarkdownFile).toHaveBeenCalledWith(notesPath);
     expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
   });
 });

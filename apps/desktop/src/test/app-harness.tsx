@@ -877,7 +877,8 @@ export function installAppTestHarness() {
       filePath: null,
       fileTreeOpen: false,
       folderName: null,
-      folderPath: null
+      folderPath: null,
+      openFilePaths: []
     });
     mockedResetWelcomeDocumentState.mockResolvedValue(undefined);
     mockedSaveStoredAiAgentPreferences.mockResolvedValue(undefined);

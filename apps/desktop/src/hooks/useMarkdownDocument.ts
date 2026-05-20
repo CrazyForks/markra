@@ -73,6 +73,40 @@ function fileTabId(path: string) {
   return `file:${path}`;
 }
 
+function normalizeOpenFilePaths(paths: readonly (string | null | undefined)[]) {
+  const seenPaths = new Set<string>();
+  const normalizedPaths: string[] = [];
+
+  paths.forEach((item) => {
+    const path = item?.trim();
+    if (!path || seenPaths.has(path)) return;
+
+    seenPaths.add(path);
+    normalizedPaths.push(path);
+  });
+
+  return normalizedPaths;
+}
+
+function openFilePathsFromTabs(tabs: readonly MarkdownDocumentTab[]) {
+  return normalizeOpenFilePaths(tabs.map((tab) => tab.open ? tab.path : null));
+}
+
+function restoreFilePathsFromWorkspace(openFilePaths: readonly string[], filePath: string | null, documentTabsEnabled: boolean) {
+  if (!documentTabsEnabled) return filePath ? [filePath] : [];
+
+  const paths = normalizeOpenFilePaths(openFilePaths);
+  const activeFilePath = filePath?.trim() ?? "";
+
+  if (activeFilePath && !paths.includes(activeFilePath)) paths.push(activeFilePath);
+
+  return paths;
+}
+
+function activeFilePathFromTabs(tabs: readonly MarkdownDocumentTab[], activeTabId: string | null) {
+  return tabs.find((tab) => tab.id === activeTabId)?.path ?? null;
+}
+
 function isPristineUntitledDocument(document: DocumentState) {
   return document.open && document.path === null && document.content === "" && !document.dirty && document.revision === 0;
 }
@@ -373,12 +407,16 @@ export function useMarkdownDocument({
     if (documentTabsEnabled) {
       syncActiveDocumentFromEditor();
       const tab = createDocumentTab(nextDocument, createUntitledTabId());
-      setActiveTabState([...tabsRef.current, tab], tab.id);
+      const nextTabs = [...tabsRef.current, tab];
+      setActiveTabState(nextTabs, tab.id);
+      persistWorkspaceState({
+        filePath: null,
+        openFilePaths: openFilePathsFromTabs(nextTabs)
+      });
     } else {
       setActiveDocument(nextDocument);
+      persistWorkspaceState({ filePath: null, openFilePaths: [] });
     }
-
-    persistWorkspaceState({ filePath: null });
     return true;
   }, [createUntitledTabId, documentTabsEnabled, setActiveDocument, setActiveTabState, syncActiveDocumentFromEditor]);
 
@@ -414,7 +452,7 @@ export function useMarkdownDocument({
     setActiveTabId(null);
     setDocument(nextDocument);
     documentRef.current = nextDocument;
-    if (options.persistWorkspace !== false) persistWorkspaceState({ filePath: null });
+    if (options.persistWorkspace !== false) persistWorkspaceState({ filePath: null, openFilePaths: [] });
   }, []);
 
   const applyNativeMarkdownFile = useCallback(
@@ -431,25 +469,32 @@ export function useMarkdownDocument({
         revision: documentRef.current.revision + 1
       };
 
+      let nextOpenFilePaths = [file.path];
+
       if (documentTabsEnabled) {
         syncActiveDocumentFromEditor();
         const currentTabs = tabsRef.current;
         const existingTab = currentTabs.find((tab) => tab.path === file.path);
+        let nextTabs: MarkdownDocumentTab[];
+        let nextActiveTabId: string;
 
         if (existingTab) {
-          setActiveTabState(currentTabs, existingTab.id);
+          nextTabs = currentTabs;
+          nextActiveTabId = existingTab.id;
         } else {
           const activeTabIsPristine = currentTabs.some((tab) =>
             tab.id === activeTabIdRef.current && isPristineUntitledDocument(documentFromTab(tab))
           );
           const nextTabId = activeTabIsPristine && activeTabIdRef.current ? activeTabIdRef.current : fileTabId(file.path);
           const nextTab = createDocumentTab(nextDocument, nextTabId);
-          const nextTabs = activeTabIsPristine
+          nextTabs = activeTabIsPristine
             ? currentTabs.map((tab) => tab.id === activeTabIdRef.current ? nextTab : tab)
             : [...currentTabs, nextTab];
-
-          setActiveTabState(nextTabs, nextTab.id);
+          nextActiveTabId = nextTab.id;
         }
+
+        setActiveTabState(nextTabs, nextActiveTabId);
+        nextOpenFilePaths = openFilePathsFromTabs(nextTabs);
       } else {
         setActiveDocument(nextDocument);
       }
@@ -458,6 +503,7 @@ export function useMarkdownDocument({
       persistWorkspaceState({
         aiAgentSessionId: sessionId,
         filePath: file.path,
+        openFilePaths: nextOpenFilePaths,
         ...(updateTreeRoot ? { folderName: null, folderPath: null } : {})
       });
     },
@@ -470,6 +516,64 @@ export function useMarkdownDocument({
       applyNativeMarkdownFile(file, updateTreeRoot, preferredSessionId);
     },
     [applyNativeMarkdownFile]
+  );
+
+  const restoreNativeMarkdownFiles = useCallback(
+    async (paths: string[], activeFilePath: string | null, updateTreeRoot = true, preferredSessionId?: string | null) => {
+      const files: NativeMarkdownFile[] = [];
+
+      for (const path of paths) {
+        try {
+          files.push(await readNativeMarkdownFile(path));
+        } catch {
+          // Missing or moved files should not block restoring the rest of the workspace.
+        }
+      }
+
+      if (files.length === 0) return false;
+
+      const sessionId = updateTreeRoot
+        ? resolveWorkspaceSessionId(preferredSessionId)
+        : resolveWorkspaceSessionId(preferredSessionId ?? workspaceSessionIdRef.current);
+      const activeFile =
+        files.find((file) => file.path === activeFilePath) ??
+        files.at(-1) ??
+        null;
+
+      if (documentTabsEnabled) {
+        const nextTabs = files.map((file) =>
+          createDocumentTab({
+            path: file.path,
+            name: file.name,
+            content: file.content,
+            dirty: false,
+            open: true,
+            revision: documentRef.current.revision + 1
+          }, fileTabId(file.path))
+        );
+
+        setActiveTabState(nextTabs, activeFile ? fileTabId(activeFile.path) : nextTabs[0]?.id ?? null);
+      } else if (activeFile) {
+        setActiveDocument({
+          path: activeFile.path,
+          name: activeFile.name,
+          content: activeFile.content,
+          dirty: false,
+          open: true,
+          revision: documentRef.current.revision + 1
+        });
+      }
+
+      if (updateTreeRoot && activeFile) onTreeRootFromFilePath(activeFile.path);
+      persistWorkspaceState({
+        aiAgentSessionId: sessionId,
+        filePath: activeFile?.path ?? null,
+        openFilePaths: files.map((file) => file.path),
+        ...(updateTreeRoot ? { folderName: null, folderPath: null } : {})
+      });
+      return true;
+    },
+    [documentTabsEnabled, onTreeRootFromFilePath, resolveWorkspaceSessionId, setActiveDocument, setActiveTabState]
   );
 
   const openMarkdownFile = useCallback(async (options: OpenMarkdownFileOptions = {}) => {
@@ -525,20 +629,21 @@ export function useMarkdownDocument({
       });
     }
 
-    setTabs((currentTabs) => {
-      const nextTabs = currentTabs.map((tab) => {
-        if (tab.path !== previousPath) return tab;
+    const nextTabs = tabsRef.current.map((tab) => {
+      if (tab.path !== previousPath) return tab;
 
-        return {
-          ...tab,
-          name: file.name,
-          path: file.path
-        };
-      });
-      tabsRef.current = nextTabs;
-      return nextTabs;
+      return {
+        ...tab,
+        name: file.name,
+        path: file.path
+      };
     });
-    persistWorkspaceState({ filePath: file.path });
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
+    persistWorkspaceState({
+      filePath: activeFilePathFromTabs(nextTabs, activeTabIdRef.current),
+      openFilePaths: openFilePathsFromTabs(nextTabs)
+    });
     return true;
   }, [setActiveDocument]);
 
@@ -575,7 +680,10 @@ export function useMarkdownDocument({
       setActiveDocument(nextDocument);
     }
 
-    persistWorkspaceState({ filePath: null });
+    persistWorkspaceState({
+      filePath: activeFilePathFromTabs(nextTabs, activeTabIdRef.current),
+      openFilePaths: openFilePathsFromTabs(nextTabs)
+    });
     return true;
   }, [documentTabsEnabled, setActiveDocument, setActiveTabState]);
 
@@ -602,13 +710,19 @@ export function useMarkdownDocument({
       };
 
       setActiveDocument(nextDocument);
+      const nextOpenFilePaths = documentTabsEnabled
+        ? openFilePathsFromTabs(tabsRef.current.map((tab) =>
+          tab.id === activeTabIdRef.current ? createDocumentTab(nextDocument, tab.id) : tab
+        ))
+        : [savedFile.path];
       if (saveAs || current.path === null) onTreeRootFromFilePath(savedFile.path);
       persistWorkspaceState({
         filePath: savedFile.path,
+        openFilePaths: nextOpenFilePaths,
         ...(saveAs || current.path === null ? { folderName: null, folderPath: null } : {})
       });
     },
-    [currentMarkdown, onTreeRootFromFilePath, setActiveDocument]
+    [currentMarkdown, documentTabsEnabled, onTreeRootFromFilePath, setActiveDocument]
   );
 
   const handleSaveClick = useCallback(() => {
@@ -621,7 +735,10 @@ export function useMarkdownDocument({
     if (!tab) return false;
 
     setActiveTabState(tabsRef.current, tab.id);
-    persistWorkspaceState({ filePath: tab.path });
+    persistWorkspaceState({
+      filePath: tab.path,
+      openFilePaths: openFilePathsFromTabs(tabsRef.current)
+    });
     return true;
   }, [setActiveTabState, syncActiveDocumentFromEditor]);
 
@@ -644,7 +761,10 @@ export function useMarkdownDocument({
         : nextTabs.find((candidate) => candidate.id === activeTabIdRef.current) ?? null;
 
     setActiveTabState(nextTabs, nextActiveTab?.id ?? null);
-    persistWorkspaceState({ filePath: nextActiveTab?.path ?? null });
+    persistWorkspaceState({
+      filePath: nextActiveTab?.path ?? null,
+      openFilePaths: openFilePathsFromTabs(nextTabs)
+    });
     return true;
   }, [confirmDiscardUnsavedChanges, hasDiscardableTabChanges, setActiveTabState, syncActiveDocumentFromEditor]);
 
@@ -802,6 +922,11 @@ export function useMarkdownDocument({
         try {
           const workspace = await getStoredWorkspaceState();
           const sessionId = workspace.aiAgentSessionId ?? createAiAgentSessionId();
+          let restoreFilePaths = restoreFilePathsFromWorkspace(
+            workspace.openFilePaths,
+            workspace.filePath,
+            documentTabsEnabled
+          );
 
           assignWorkspaceSessionId(sessionId);
 
@@ -810,7 +935,7 @@ export function useMarkdownDocument({
               workspace.folderPath,
               workspace.folderName ?? workspace.folderPath,
               sessionId,
-              !workspace.filePath
+              restoreFilePaths.length === 0
             );
             if (!active) return;
 
@@ -818,25 +943,26 @@ export function useMarkdownDocument({
               persistWorkspaceState({
                 fileTreeOpen: false,
                 folderName: null,
-                folderPath: null
+                folderPath: null,
+                openFilePaths: []
               });
+              restoreFilePaths = [];
               restoredWorkspace = true;
             } else {
-              if (!workspace.filePath) clearOpenDocument({ persistWorkspace: false });
+              if (restoreFilePaths.length === 0) clearOpenDocument({ persistWorkspace: false });
               restoredWorkspace = true;
             }
           }
 
-          if (workspace.filePath) {
-            try {
-              const file = await readNativeMarkdownFile(workspace.filePath);
-              if (!active) return;
-
-              applyNativeMarkdownFile(file, !restoredWorkspace, sessionId);
-              restoredWorkspace = true;
-            } catch {
-              // A deleted or moved file should not block the normal launch fallback.
-            }
+          if (restoreFilePaths.length > 0) {
+            const restoredFiles = await restoreNativeMarkdownFiles(
+              restoreFilePaths,
+              workspace.filePath,
+              !restoredWorkspace,
+              sessionId
+            );
+            if (!active) return;
+            if (restoredFiles) restoredWorkspace = true;
           }
 
           if (workspace.aiAgentSessionId !== sessionId) {
@@ -868,12 +994,13 @@ export function useMarkdownDocument({
       active = false;
     };
   }, [
-    applyNativeMarkdownFile,
     assignWorkspaceSessionId,
     clearOpenDocument,
+    documentTabsEnabled,
     nativeOpenedPathsReady,
     onTreeRootFromFolderPath,
     preferencesReady,
+    restoreNativeMarkdownFiles,
     resolveWorkspaceSessionId,
     restoreWorkspaceOnStartup,
     setActiveDocument

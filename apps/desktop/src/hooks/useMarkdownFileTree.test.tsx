@@ -190,7 +190,8 @@ describe("useMarkdownFileTree", () => {
       filePath: null,
       fileTreeOpen: true,
       folderName: "vault",
-      folderPath: "/vault"
+      folderPath: "/vault",
+      openFilePaths: []
     });
     expect(mockedSaveStoredRecentMarkdownFolder).toHaveBeenCalledWith({
       name: "vault",

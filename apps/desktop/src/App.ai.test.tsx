@@ -243,7 +243,8 @@ describe("Markra AI workspace", () => {
       filePath: mockNativePath,
       fileTreeOpen: false,
       folderName: null,
-      folderPath: null
+      folderPath: null,
+      openFilePaths: [mockNativePath]
     });
     mockedReadNativeMarkdownFile.mockResolvedValue({
       content: "Original text",
@@ -278,7 +279,8 @@ describe("Markra AI workspace", () => {
       filePath: mockNativePath,
       fileTreeOpen: false,
       folderName: null,
-      folderPath: null
+      folderPath: null,
+      openFilePaths: [mockNativePath]
     });
     mockedReadNativeMarkdownFile.mockResolvedValue({
       content: "Original text",
