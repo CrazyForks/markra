@@ -319,22 +319,24 @@ describe("native file access", () => {
 
   it("lists markdown files below the current file folder", async () => {
     mockedInvoke.mockResolvedValue([
-      { path: "/mock-files/docs", relativePath: "docs" },
-      { kind: "asset", path: "/mock-files/assets/pasted-image.png", relativePath: "assets/pasted-image.png" },
-      { path: "/mock-files/readme.md", relativePath: "readme.md" },
-      { path: "/mock-files/docs/guide.md", relativePath: "docs/guide.md" }
+      { path: "/mock-files/docs", relativePath: "docs", createdAt: 10, modifiedAt: 20 },
+      { kind: "asset", path: "/mock-files/assets/pasted-image.png", relativePath: "assets/pasted-image.png", createdAt: 30, modifiedAt: 40 },
+      { path: "/mock-files/readme.md", relativePath: "readme.md", createdAt: 50, modifiedAt: 60 },
+      { path: "/mock-files/docs/guide.md", relativePath: "docs/guide.md", createdAt: 70, modifiedAt: 80 }
     ]);
 
     await expect(listNativeMarkdownFilesForPath(mockReadmePath)).resolves.toEqual([
-      { kind: "folder", path: "/mock-files/docs", name: "docs", relativePath: "docs" },
+      { kind: "folder", path: "/mock-files/docs", name: "docs", relativePath: "docs", createdAt: 10, modifiedAt: 20 },
       {
         kind: "asset",
         path: "/mock-files/assets/pasted-image.png",
         name: "pasted-image.png",
-        relativePath: "assets/pasted-image.png"
+        relativePath: "assets/pasted-image.png",
+        createdAt: 30,
+        modifiedAt: 40
       },
-      { path: "/mock-files/readme.md", name: "readme.md", relativePath: "readme.md" },
-      { path: "/mock-files/docs/guide.md", name: "guide.md", relativePath: "docs/guide.md" }
+      { path: "/mock-files/readme.md", name: "readme.md", relativePath: "readme.md", createdAt: 50, modifiedAt: 60 },
+      { path: "/mock-files/docs/guide.md", name: "guide.md", relativePath: "docs/guide.md", createdAt: 70, modifiedAt: 80 }
     ]);
 
     expect(mockedInvoke).toHaveBeenCalledWith("list_markdown_files_for_path", {

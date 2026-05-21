@@ -15,7 +15,9 @@ type MarkdownTemplateFileResponse = {
 };
 
 type MarkdownFolderFileResponse = {
+  createdAt?: number;
   kind?: "asset" | "file" | "folder";
+  modifiedAt?: number;
   path: string;
   relativePath: string;
 };
@@ -37,7 +39,9 @@ export type NativeMarkdownFile = {
 };
 
 export type NativeMarkdownFolderFile = {
+  createdAt?: number;
   kind?: "asset" | "folder";
+  modifiedAt?: number;
   path: string;
   name: string;
   relativePath: string;
@@ -333,6 +337,14 @@ function markdownFolderFileFromResponse(file: MarkdownFolderFileResponse): Nativ
     name: fileNameFromPath(file.path),
     relativePath: file.relativePath
   };
+
+  if (typeof file.createdAt === "number") {
+    mappedFile.createdAt = file.createdAt;
+  }
+
+  if (typeof file.modifiedAt === "number") {
+    mappedFile.modifiedAt = file.modifiedAt;
+  }
 
   if (file.kind === "asset" || (!file.kind && isMarkdownTreeAssetPath(file.relativePath))) {
     mappedFile.kind = "asset";

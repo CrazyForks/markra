@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::windows::{
     editor_window_url_for_folder, editor_window_url_for_path, spawn_editor_window,
@@ -31,7 +31,11 @@ pub(crate) enum MarkdownFolderEntryKind {
 #[derive(Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct MarkdownFolderFile {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) created_at: Option<u64>,
     pub(crate) kind: MarkdownFolderEntryKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) modified_at: Option<u64>,
     pub(crate) path: String,
     pub(crate) relative_path: String,
 }
@@ -101,6 +105,19 @@ fn is_markdown_open_file(path: &Path) -> bool {
 
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
+}
+
+fn system_time_millis(time: SystemTime) -> Option<u64> {
+    time.duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| duration.as_millis().try_into().ok())
+}
+
+fn file_metadata_time_millis(
+    metadata: &fs::Metadata,
+    read_time: impl FnOnce(&fs::Metadata) -> std::io::Result<SystemTime>,
+) -> Option<u64> {
+    read_time(metadata).ok().and_then(system_time_millis)
 }
 
 pub(crate) fn markdown_open_path_for_path(path: &Path) -> Result<MarkdownOpenPath, String> {
@@ -428,8 +445,14 @@ fn markdown_folder_file(
     path: &Path,
     kind: MarkdownFolderEntryKind,
 ) -> Result<MarkdownFolderFile, String> {
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    let modified_at = file_metadata_time_millis(&metadata, fs::Metadata::modified);
+    let created_at = file_metadata_time_millis(&metadata, fs::Metadata::created).or(modified_at);
+
     Ok(MarkdownFolderFile {
+        created_at,
         kind,
+        modified_at,
         path: path_to_string(path),
         relative_path: markdown_tree_relative_path(root, path)?,
     })
@@ -1145,11 +1168,7 @@ pub(crate) fn create_markdown_tree_file(
 
     fs::write(&target_path, contents.unwrap_or_default()).map_err(|error| error.to_string())?;
 
-    Ok(MarkdownFolderFile {
-        kind: MarkdownFolderEntryKind::File,
-        path: path_to_string(&target_path),
-        relative_path: markdown_tree_relative_path(&root, &target_path)?,
-    })
+    markdown_folder_file(&root, &target_path, MarkdownFolderEntryKind::File)
 }
 
 #[tauri::command]
@@ -1291,6 +1310,19 @@ pub(crate) fn open_markdown_folder_in_new_window(
 mod tests {
     use super::*;
 
+    fn assert_markdown_folder_file(
+        file: &MarkdownFolderFile,
+        kind: MarkdownFolderEntryKind,
+        path: &Path,
+        relative_path: &str,
+    ) {
+        assert_eq!(&file.kind, &kind);
+        assert_eq!(file.path, path.to_string_lossy().to_string());
+        assert_eq!(file.relative_path, relative_path);
+        assert!(file.created_at.is_some());
+        assert!(file.modified_at.is_some());
+    }
+
     #[test]
     fn normalizes_markdown_template_file_names() {
         assert_eq!(
@@ -1372,48 +1404,22 @@ mod tests {
         .expect("markdown tree should be listed");
 
         assert_eq!(
-            files,
+            files
+                .iter()
+                .map(|file| (&file.kind, file.relative_path.as_str()))
+                .collect::<Vec<_>>(),
             vec![
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::Folder,
-                    path: assets.to_string_lossy().to_string(),
-                    relative_path: "assets".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::Asset,
-                    path: assets
-                        .join("pasted-image.png")
-                        .to_string_lossy()
-                        .to_string(),
-                    relative_path: "assets/pasted-image.png".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::File,
-                    path: root.join("AWS.md").to_string_lossy().to_string(),
-                    relative_path: "AWS.md".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::Folder,
-                    path: docs.to_string_lossy().to_string(),
-                    relative_path: "docs".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::File,
-                    path: docs.join("guide.markdown").to_string_lossy().to_string(),
-                    relative_path: "docs/guide.markdown".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::Folder,
-                    path: root.join("empty").to_string_lossy().to_string(),
-                    relative_path: "empty".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::File,
-                    path: root.join("Untitled.md").to_string_lossy().to_string(),
-                    relative_path: "Untitled.md".to_string(),
-                },
+                (&MarkdownFolderEntryKind::Folder, "assets"),
+                (&MarkdownFolderEntryKind::Asset, "assets/pasted-image.png"),
+                (&MarkdownFolderEntryKind::File, "AWS.md"),
+                (&MarkdownFolderEntryKind::Folder, "docs"),
+                (&MarkdownFolderEntryKind::File, "docs/guide.markdown"),
+                (&MarkdownFolderEntryKind::Folder, "empty"),
+                (&MarkdownFolderEntryKind::File, "Untitled.md"),
             ]
         );
+        assert!(files.iter().all(|file| file.created_at.is_some()));
+        assert!(files.iter().all(|file| file.modified_at.is_some()));
 
         fs::remove_dir_all(root).expect("test tree should be removed");
     }
@@ -1440,25 +1446,18 @@ mod tests {
         .expect("selected folder tree should be listed");
 
         assert_eq!(
-            files,
+            files
+                .iter()
+                .map(|file| (&file.kind, file.relative_path.as_str()))
+                .collect::<Vec<_>>(),
             vec![
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::Folder,
-                    path: docs.to_string_lossy().to_string(),
-                    relative_path: "docs".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::File,
-                    path: docs.join("note.md").to_string_lossy().to_string(),
-                    relative_path: "docs/note.md".to_string(),
-                },
-                MarkdownFolderFile {
-                    kind: MarkdownFolderEntryKind::File,
-                    path: root.join("index.md").to_string_lossy().to_string(),
-                    relative_path: "index.md".to_string(),
-                },
+                (&MarkdownFolderEntryKind::Folder, "docs"),
+                (&MarkdownFolderEntryKind::File, "docs/note.md"),
+                (&MarkdownFolderEntryKind::File, "index.md"),
             ]
         );
+        assert!(files.iter().all(|file| file.created_at.is_some()));
+        assert!(files.iter().all(|file| file.modified_at.is_some()));
 
         fs::remove_dir_all(root).expect("test tree should be removed");
     }
@@ -1600,16 +1599,11 @@ mod tests {
         )
         .expect("markdown file should be created");
 
-        assert_eq!(
-            created,
-            MarkdownFolderFile {
-                kind: MarkdownFolderEntryKind::File,
-                path: canonical_root
-                    .join("Daily note.md")
-                    .to_string_lossy()
-                    .to_string(),
-                relative_path: "Daily note.md".to_string(),
-            }
+        assert_markdown_folder_file(
+            &created,
+            MarkdownFolderEntryKind::File,
+            &canonical_root.join("Daily note.md"),
+            "Daily note.md",
         );
         assert_eq!(
             fs::read_to_string(root.join("Daily note.md"))
@@ -1638,16 +1632,11 @@ mod tests {
         )
         .expect("markdown file should be renamed");
 
-        assert_eq!(
-            renamed,
-            MarkdownFolderFile {
-                kind: MarkdownFolderEntryKind::File,
-                path: canonical_root
-                    .join("Journal.markdown")
-                    .to_string_lossy()
-                    .to_string(),
-                relative_path: "Journal.markdown".to_string(),
-            }
+        assert_markdown_folder_file(
+            &renamed,
+            MarkdownFolderEntryKind::File,
+            &canonical_root.join("Journal.markdown"),
+            "Journal.markdown",
         );
         assert!(!root.join("Daily note.md").exists());
 
@@ -1668,17 +1657,11 @@ mod tests {
         )
         .expect("image asset should be renamed");
 
-        assert_eq!(
-            renamed_image,
-            MarkdownFolderFile {
-                kind: MarkdownFolderEntryKind::Asset,
-                path: canonical_root
-                    .join("assets")
-                    .join("renamed-image.png")
-                    .to_string_lossy()
-                    .to_string(),
-                relative_path: "assets/renamed-image.png".to_string(),
-            }
+        assert_markdown_folder_file(
+            &renamed_image,
+            MarkdownFolderEntryKind::Asset,
+            &canonical_root.join("assets").join("renamed-image.png"),
+            "assets/renamed-image.png",
         );
         assert!(!assets.join("pasted-image.png").exists());
 
@@ -2053,16 +2036,11 @@ mod tests {
         )
         .expect("markdown folder should be created");
 
-        assert_eq!(
-            created,
-            MarkdownFolderFile {
-                kind: MarkdownFolderEntryKind::Folder,
-                path: canonical_root
-                    .join("Research")
-                    .to_string_lossy()
-                    .to_string(),
-                relative_path: "Research".to_string(),
-            }
+        assert_markdown_folder_file(
+            &created,
+            MarkdownFolderEntryKind::Folder,
+            &canonical_root.join("Research"),
+            "Research",
         );
         assert!(root.join("Research").is_dir());
 
@@ -2075,17 +2053,11 @@ mod tests {
         )
         .expect("nested markdown folder should be created");
 
-        assert_eq!(
-            nested,
-            MarkdownFolderFile {
-                kind: MarkdownFolderEntryKind::Folder,
-                path: canonical_root
-                    .join("docs")
-                    .join("Sprint")
-                    .to_string_lossy()
-                    .to_string(),
-                relative_path: "docs/Sprint".to_string(),
-            }
+        assert_markdown_folder_file(
+            &nested,
+            MarkdownFolderEntryKind::Folder,
+            &canonical_root.join("docs").join("Sprint"),
+            "docs/Sprint",
         );
         assert!(docs.join("Sprint").is_dir());
         assert!(create_markdown_tree_folder(
