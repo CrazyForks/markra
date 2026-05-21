@@ -2245,6 +2245,7 @@ export default function App() {
                           bodyFontSize={editorPreferences.preferences.bodyFontSize}
                           contentWidth={activeEditorContentWidth}
                           contentWidthPx={activeEditorContentWidthPx}
+                          documentKey={activeTabId}
                           documentPath={document.path}
                           editorTheme={appTheme.editorTheme}
                           initialContent={document.content}
@@ -2325,6 +2326,7 @@ export default function App() {
                       bodyFontSize={editorPreferences.preferences.bodyFontSize}
                       contentWidth={activeEditorContentWidth}
                       contentWidthPx={activeEditorContentWidthPx}
+                      documentKey={activeTabId}
                       documentPath={document.path}
                       editorTheme={appTheme.editorTheme}
                       initialContent={document.content}
@@ -2377,6 +2379,7 @@ export default function App() {
                         content={sideDocumentTab.content}
                         contentWidth={activeEditorContentWidth}
                         contentWidthPx={activeEditorContentWidthPx}
+                        documentKey={sideDocumentTab.id}
                         documentPath={sideDocumentTab.path}
                         editorTheme={appTheme.editorTheme}
                         language={appLanguage.language}

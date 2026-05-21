@@ -18,6 +18,7 @@ type MarkdownPaperProps = {
   contentWidthMax?: number;
   contentWidthMin?: number;
   contentWidthPx?: number | null;
+  documentKey?: string | null;
   documentPath?: MarkdownPaperSurfaceProps["documentPath"];
   editorTheme?: EditorTheme;
   initialContent: string;
@@ -50,6 +51,7 @@ export function MarkdownPaper({
   contentWidthMax = editorCustomContentWidthMax,
   contentWidthMin = editorCustomContentWidthMin,
   contentWidthPx = null,
+  documentKey,
   documentPath,
   editorTheme = "light",
   initialContent,
@@ -81,6 +83,7 @@ export function MarkdownPaper({
     ...(bottomOverlayInset > 0 ? { paddingBottom: `${bottomOverlayInset}px` } : {})
   } satisfies CSSProperties;
   const topInsetClassName = topInset === "tabs" ? "pt-24 max-[900px]:pt-20" : "pt-14 max-[900px]:pt-10";
+  const editorInstanceKey = `${documentKey ?? documentPath ?? "untitled"}:${revision}`;
 
   return (
     <section
@@ -90,7 +93,7 @@ export function MarkdownPaper({
       ref={scrollRef}
     >
       <article
-        key={revision}
+        key={editorInstanceKey}
         className={`markdown-paper relative mx-auto min-h-screen w-full max-w-215 px-18 pb-30 ${topInsetClassName} text-[16px] leading-[1.65] text-(--text-primary) caret-(--accent) outline-none focus:outline-none max-[900px]:px-5.25`}
         style={paperStyle}
         aria-label={t(language, "app.markdownEditor")}

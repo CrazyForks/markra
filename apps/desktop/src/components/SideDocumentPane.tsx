@@ -11,6 +11,7 @@ type SideDocumentPaneProps = {
   content: string;
   contentWidth: EditorContentWidth;
   contentWidthPx: number | null;
+  documentKey?: string | null;
   documentPath?: string | null;
   editorTheme: EditorTheme;
   language?: AppLanguage;
@@ -37,6 +38,7 @@ export function SideDocumentPane({
   content,
   contentWidth,
   contentWidthPx,
+  documentKey,
   documentPath,
   editorTheme,
   language = "en",
@@ -81,6 +83,7 @@ export function SideDocumentPane({
           bodyFontSize={bodyFontSize}
           contentWidth={contentWidth}
           contentWidthPx={contentWidthPx}
+          documentKey={documentKey}
           documentPath={documentPath}
           editorTheme={editorTheme}
           initialContent={content}

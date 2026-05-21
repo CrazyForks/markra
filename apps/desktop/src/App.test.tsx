@@ -300,6 +300,45 @@ describe("Markra workspace", () => {
     expect(mockedConsumeWelcomeDocumentState).not.toHaveBeenCalled();
   });
 
+  it("switches visual editor content after restoring multiple document tabs", async () => {
+    const guidePath = "/mock-files/vault/guide.md";
+    const notesPath = "/mock-files/vault/notes.md";
+    mockedGetStoredWorkspaceState.mockResolvedValue({
+      aiAgentSessionId: "session-restored-tabs",
+      filePath: notesPath,
+      fileTreeOpen: false,
+      folderName: null,
+      folderPath: null,
+      openFilePaths: [guidePath, notesPath]
+    });
+    mockedReadNativeMarkdownFile.mockImplementation(async (path) => {
+      if (path === guidePath) {
+        return {
+          content: "# Guide",
+          name: "guide.md",
+          path
+        };
+      }
+
+      return {
+        content: "# Notes",
+        name: "notes.md",
+        path
+      };
+    });
+
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /notes\.md/ })).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
+
+    expect(await screen.findByRole("heading", { name: "Guide" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Notes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /guide\.md/ })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("restores a saved side-by-side tab group on app launch", async () => {
     const firstPath = "/mock-files/vault/docs/1.md";
     const secondPath = "/mock-files/vault/docs/2.md";
