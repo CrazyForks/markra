@@ -5,9 +5,14 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
 } from "react";
 import {
+  ArrowDownAZ,
+  ArrowUpDown,
+  ArrowUpZA,
+  Check,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -73,9 +78,11 @@ type MarkdownFileTreeDrawerProps = {
 
 type FolderNode = {
   type: "folder";
+  createdAt?: number;
   name: string;
   path: string | null;
   relativePath: string;
+  modifiedAt?: number;
   children: TreeNode[];
 };
 
@@ -87,17 +94,47 @@ type FileNode = {
 };
 
 type TreeNode = FolderNode | FileNode;
+type FileTreeSortKey = "createdAt" | "modifiedAt" | "name";
+type FileTreeSortDirection = "ascending" | "descending";
+type FileTreeSort = {
+  direction: FileTreeSortDirection;
+  key: FileTreeSortKey;
+};
 
 const emptyMarkdownTemplates: readonly MarkdownTemplate[] = [];
+const defaultFileTreeSort = {
+  direction: "ascending",
+  key: "name"
+} satisfies FileTreeSort;
 
-function sortTreeNodes(nodes: TreeNode[]) {
+function nodeNameSort(left: TreeNode, right: TreeNode) {
+  return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function nodeTimestamp(node: TreeNode, key: Exclude<FileTreeSortKey, "name">) {
+  const value = node.type === "folder" ? node[key] : node.file[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function sortTreeNodes(nodes: TreeNode[], sort: FileTreeSort) {
   nodes.sort((a, b) => {
     if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+    if (sort.key === "name") {
+      return sort.direction === "ascending" ? nodeNameSort(a, b) : nodeNameSort(b, a);
+    }
+
+    const leftTimestamp = nodeTimestamp(a, sort.key);
+    const rightTimestamp = nodeTimestamp(b, sort.key);
+    if (leftTimestamp !== null && rightTimestamp !== null && leftTimestamp !== rightTimestamp) {
+      return sort.direction === "ascending" ? leftTimestamp - rightTimestamp : rightTimestamp - leftTimestamp;
+    }
+    if (leftTimestamp !== null && rightTimestamp === null) return -1;
+    if (leftTimestamp === null && rightTimestamp !== null) return 1;
+    return nodeNameSort(a, b);
   });
 
   nodes.forEach((node) => {
-    if (node.type === "folder") sortTreeNodes(node.children);
+    if (node.type === "folder") sortTreeNodes(node.children, sort);
   });
 }
 
@@ -132,7 +169,11 @@ function parentPathFromPath(path: string) {
   return path.slice(0, lastSeparatorIndex);
 }
 
-function buildMarkdownFileTree(files: NativeMarkdownFolderFile[], rootPath?: string | null) {
+function buildMarkdownFileTree(
+  files: NativeMarkdownFolderFile[],
+  rootPath?: string | null,
+  sort: FileTreeSort = defaultFileTreeSort
+) {
   const rootNodes: TreeNode[] = [];
   const folders = new Map<string, FolderNode>();
 
@@ -147,9 +188,11 @@ function buildMarkdownFileTree(files: NativeMarkdownFolderFile[], rootPath?: str
     if (!folder) {
       folder = {
         type: "folder",
+        createdAt: undefined,
         name: folderName,
         path: folderPath,
         relativePath,
+        modifiedAt: undefined,
         children: []
       };
       folders.set(relativePath, folder);
@@ -177,7 +220,9 @@ function buildMarkdownFileTree(files: NativeMarkdownFolderFile[], rootPath?: str
     });
 
     if (file.kind === "folder") {
-      ensureFolder(file.relativePath, siblings, parts.at(-1) ?? file.name, file.path);
+      const folder = ensureFolder(file.relativePath, siblings, parts.at(-1) ?? file.name, file.path);
+      folder.createdAt = file.createdAt;
+      folder.modifiedAt = file.modifiedAt;
       return;
     }
 
@@ -189,7 +234,7 @@ function buildMarkdownFileTree(files: NativeMarkdownFolderFile[], rootPath?: str
     });
   });
 
-  sortTreeNodes(rootNodes);
+  sortTreeNodes(rootNodes, sort);
   return rootNodes;
 }
 
@@ -225,7 +270,9 @@ function collectMarkdownFolderPaths(nodes: TreeNode[]) {
 
 function folderNodeAsFile(node: FolderNode): NativeMarkdownFolderFile {
   return {
+    createdAt: node.createdAt,
     kind: "folder",
+    modifiedAt: node.modifiedAt,
     name: node.name,
     path: node.path ?? node.relativePath,
     relativePath: node.relativePath
@@ -288,10 +335,17 @@ export function MarkdownFileTreeDrawer({
   const [creatingTemplateStartedAt, setCreatingTemplateStartedAt] = useState<Date | null>(null);
   const [newFileName, setNewFileName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
-  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const [fileTreeSortMenuOpen, setFileTreeSortMenuOpen] = useState(false);
+  const [fileTreeSortKey, setFileTreeSortKey] = useState<FileTreeSortKey>(defaultFileTreeSort.key);
+  const [fileTreeSortDirection, setFileTreeSortDirection] = useState<FileTreeSortDirection>(defaultFileTreeSort.direction);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameFileName, setRenameFileName] = useState("");
-  const fullTree = useMemo(() => buildMarkdownFileTree(files, rootPath), [files, rootPath]);
+  const fileTreeSort = useMemo(
+    () => ({ direction: fileTreeSortDirection, key: fileTreeSortKey }) satisfies FileTreeSort,
+    [fileTreeSortDirection, fileTreeSortKey]
+  );
+  const fullTree = useMemo(() => buildMarkdownFileTree(files, rootPath, fileTreeSort), [files, rootPath, fileTreeSort]);
   const tree = useMemo(() => filterMarkdownFileTree(fullTree, searchQuery), [fullTree, searchQuery]);
   const folderPaths = useMemo(() => collectMarkdownFolderPaths(fullTree), [fullTree]);
   const availableMarkdownTemplates = useMemo(() => mergeMarkdownTemplates(customTemplates), [customTemplates]);
@@ -315,7 +369,6 @@ export function MarkdownFileTreeDrawer({
   const filePanelVisible = folderOpen;
   const filePanelStyle = outlineOpen ? { flex: `0 1 ${100 - outlineHeightPercent}%` } : undefined;
   const outlinePanelStyle = outlineOpen ? { flex: `0 1 ${outlineHeightPercent}%` } : undefined;
-
   useEffect(() => {
     return () => {
       resizeCleanupRef.current?.();
@@ -346,6 +399,15 @@ export function MarkdownFileTreeDrawer({
     });
   };
 
+  const selectFileTreeSortKey = (key: FileTreeSortKey) => {
+    setFileTreeSortKey(key);
+    setFileTreeSortDirection(key === "name" ? "ascending" : "descending");
+  };
+
+  const selectFileTreeSortDirection = (direction: FileTreeSortDirection) => {
+    setFileTreeSortDirection(direction);
+  };
+
   const startCreatingFile = (parentPath: string | null = null, template: MarkdownTemplate | null = null) => {
     if (!fileCreationAvailable) return;
 
@@ -359,7 +421,7 @@ export function MarkdownFileTreeDrawer({
     setCreatingTemplateStartedAt(template ? startedAt : null);
     setCreatingFile(true);
     setNewFileName(template ? suggestedMarkdownTemplateFileName(template, { now: startedAt, title: "" }) : "");
-    setTemplateMenuOpen(false);
+    setCreateMenuOpen(false);
   };
 
   const startCreatingFolder = (parentPath: string | null = null) => {
@@ -374,7 +436,7 @@ export function MarkdownFileTreeDrawer({
     setCreatingParentPath(normalizeCreateParentPath(parentPath));
     setCreatingFolder(true);
     setNewFolderName("");
-    setTemplateMenuOpen(false);
+    setCreateMenuOpen(false);
   };
 
   const commitCreateFolder = () => {
@@ -442,7 +504,7 @@ export function MarkdownFileTreeDrawer({
     setCreatingFolder(false);
     setNewFolderName("");
     setCreatingParentPath(null);
-    setTemplateMenuOpen(false);
+    setCreateMenuOpen(false);
     setRenamingPath(file.path);
     setRenameFileName(file.name);
   };
@@ -468,7 +530,7 @@ export function MarkdownFileTreeDrawer({
     setCreatingFolder(false);
     setNewFolderName("");
     setCreatingParentPath(null);
-    setTemplateMenuOpen(false);
+    setCreateMenuOpen(false);
     setRenamingPath(null);
     setRenameFileName("");
   };
@@ -883,6 +945,53 @@ export function MarkdownFileTreeDrawer({
     )
   );
 
+  const renderSortMenuItem = (key: FileTreeSortKey, itemLabel: string) => (
+    <button
+      className="flex h-7 w-full items-center gap-2 border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none aria-checked:text-(--text-heading)"
+      role="menuitemradio"
+      aria-checked={fileTreeSortKey === key}
+      type="button"
+      onClick={() => selectFileTreeSortKey(key)}
+    >
+      <span className="flex w-3 justify-center" aria-hidden="true">
+        {fileTreeSortKey === key ? <Check size={12} /> : null}
+      </span>
+      <span>{itemLabel}</span>
+    </button>
+  );
+
+  const renderSortDirectionMenuItem = (
+    direction: FileTreeSortDirection,
+    itemLabel: string,
+    icon: ReactNode
+  ) => (
+    <button
+      className="flex h-7 w-full items-center gap-2 border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none aria-checked:text-(--text-heading)"
+      role="menuitemradio"
+      aria-checked={fileTreeSortDirection === direction}
+      type="button"
+      onClick={() => selectFileTreeSortDirection(direction)}
+    >
+      <span className="flex w-3 justify-center" aria-hidden="true">
+        {fileTreeSortDirection === direction ? <Check size={12} /> : null}
+      </span>
+      <span className="flex w-3.5 justify-center" aria-hidden="true">{icon}</span>
+      <span>{itemLabel}</span>
+    </button>
+  );
+
+  const renderCreateMenuItem = (itemLabel: string, icon: ReactNode, onClick: () => unknown) => (
+    <button
+      className="flex h-7 w-full items-center gap-2 border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none"
+      role="menuitem"
+      type="button"
+      onClick={onClick}
+    >
+      <span className="flex w-3.5 justify-center" aria-hidden="true">{icon}</span>
+      <span>{itemLabel}</span>
+    </button>
+  );
+
   const renderFolderAccessArea = () => (
     recentFolderAreaVisible ? (
       <div className="shrink-0 border-b border-(--border-default) bg-(--bg-secondary)">
@@ -1058,66 +1167,51 @@ export function MarkdownFileTreeDrawer({
                   <Folder aria-hidden="true" size={16} />
                   <span className="min-w-0 truncate">{rootName}</span>
                 </div>
-                {fileCreationAvailable ? (
-                  <>
-                    {folderExpansionAvailable ? (
-                      <IconButton
-                        className="rounded-md"
-                        label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
-                        pressed={allFoldersExpanded}
-                        onClick={toggleAllFolders}
-                      >
-                        {allFoldersExpanded ? (
-                          <ListChevronsDownUp aria-hidden="true" size={14} />
-                        ) : (
-                          <ListChevronsUpDown aria-hidden="true" size={14} />
-                        )}
-                      </IconButton>
-                    ) : null}
-                    <IconButton
-                      className="rounded-md"
-                      label={label("app.newMarkdownFile")}
-                      onClick={() => startCreatingFile()}
+                <div className="relative">
+                  <IconButton
+                    className="rounded-md"
+                    label={label("app.sortMarkdownFiles")}
+                    pressed={fileTreeSortMenuOpen}
+                    onClick={() => {
+                      setFileTreeSortMenuOpen((open) => {
+                        const nextOpen = !open;
+                        if (nextOpen) setCreateMenuOpen(false);
+                        return nextOpen;
+                      });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setFileTreeSortMenuOpen(false);
+                      }
+                    }}
+                  >
+                    <ArrowUpDown aria-hidden="true" size={14} />
+                  </IconButton>
+                  {fileTreeSortMenuOpen ? (
+                    <div
+                      className="absolute top-8 right-0 z-40 min-w-40 rounded-md border border-(--border-default) bg-(--bg-primary) py-1 shadow-[0_12px_30px_color-mix(in_srgb,var(--text-heading)_14%,transparent)]"
+                      role="menu"
+                      aria-label={label("app.sortMarkdownFiles")}
                     >
-                      <Plus aria-hidden="true" size={14} />
-                    </IconButton>
-                    <div className="relative">
-                      <IconButton
-                        className="rounded-md"
-                        label={label("app.newMarkdownFileFromTemplate")}
-                        pressed={templateMenuOpen}
-                        onClick={() => setTemplateMenuOpen((open) => !open)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setTemplateMenuOpen(false);
-                          }
-                        }}
-                      >
-                        <LayoutTemplate aria-hidden="true" size={14} />
-                      </IconButton>
-                      {templateMenuOpen ? (
-                        <div
-                          className="absolute top-8 right-0 z-40 min-w-40 rounded-md border border-(--border-default) bg-(--bg-primary) py-1 shadow-[0_12px_30px_color-mix(in_srgb,var(--text-heading)_14%,transparent)]"
-                          role="menu"
-                          aria-label={label("app.newMarkdownFileFromTemplate")}
-                        >
-                          {availableMarkdownTemplates.map((template, index) => (
-                            <button
-                              key={`${template.id}-${index}`}
-                              className="flex h-7 w-full items-center gap-2 border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none"
-                              role="menuitem"
-                              type="button"
-                              onClick={() => startCreatingFile(null, template)}
-                            >
-                              {template.name}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                      {renderSortMenuItem("name", label("app.sortMarkdownFilesByName"))}
+                      {renderSortMenuItem("modifiedAt", label("app.sortMarkdownFilesByModifiedTime"))}
+                      {renderSortMenuItem("createdAt", label("app.sortMarkdownFilesByCreatedTime"))}
+                      <div className="my-1 h-px bg-(--border-default)" role="separator" />
+                      {renderSortDirectionMenuItem(
+                        "ascending",
+                        label("app.sortMarkdownFilesAscending"),
+                        <ArrowDownAZ size={13} />
+                      )}
+                      {renderSortDirectionMenuItem(
+                        "descending",
+                        label("app.sortMarkdownFilesDescending"),
+                        <ArrowUpZA size={13} />
+                      )}
                     </div>
-                  </>
-                ) : folderExpansionAvailable ? (
+                  ) : null}
+                </div>
+                {folderExpansionAvailable ? (
                   <IconButton
                     className="rounded-md"
                     label={allFoldersExpanded ? label("app.collapseMarkdownFolders") : label("app.expandMarkdownFolders")}
@@ -1130,6 +1224,70 @@ export function MarkdownFileTreeDrawer({
                       <ListChevronsUpDown aria-hidden="true" size={14} />
                     )}
                   </IconButton>
+                ) : null}
+                {folderActionsAvailable ? (
+                  <div className="relative">
+                    <IconButton
+                      className="rounded-md"
+                      label={label("app.newMarkdownItem")}
+                      pressed={createMenuOpen}
+                      onClick={() => {
+                        setCreateMenuOpen((open) => {
+                          const nextOpen = !open;
+                          if (nextOpen) setFileTreeSortMenuOpen(false);
+                          return nextOpen;
+                        });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setCreateMenuOpen(false);
+                        }
+                      }}
+                    >
+                      <Plus aria-hidden="true" size={14} />
+                    </IconButton>
+                    {createMenuOpen ? (
+                      <div
+                        className="absolute top-8 right-0 z-40 min-w-44 rounded-md border border-(--border-default) bg-(--bg-primary) py-1 shadow-[0_12px_30px_color-mix(in_srgb,var(--text-heading)_14%,transparent)]"
+                        role="menu"
+                        aria-label={label("app.newMarkdownItem")}
+                      >
+                        {fileCreationAvailable ? renderCreateMenuItem(
+                          label("app.newMarkdownFile"),
+                          <FileText size={13} />,
+                          () => startCreatingFile()
+                        ) : null}
+                        {folderCreationAvailable ? renderCreateMenuItem(
+                          label("app.newMarkdownFolder"),
+                          <Folder size={13} />,
+                          () => startCreatingFolder()
+                        ) : null}
+                        {fileCreationAvailable ? (
+                          <>
+                            <div className="my-1 h-px bg-(--border-default)" role="separator" />
+                            <div className="px-2.5 pb-1 pt-0.5 text-[11px] leading-none font-[560] text-(--text-secondary)">
+                              {label("app.newMarkdownFileFromTemplate")}
+                            </div>
+                            {availableMarkdownTemplates.map((template, index) => (
+                              <button
+                                key={`${template.id}-${index}`}
+                                className="flex h-7 w-full items-center gap-2 border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-heading) focus-visible:bg-(--bg-hover) focus-visible:text-(--text-heading) focus-visible:outline-none"
+                                role="menuitem"
+                                type="button"
+                                onClick={() => startCreatingFile(null, template)}
+                              >
+                                <span className="flex w-3.5 justify-center" aria-hidden="true">
+                                  <LayoutTemplate size={13} />
+                                </span>
+                                <span>{template.name}</span>
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 

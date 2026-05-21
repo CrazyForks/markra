@@ -420,6 +420,7 @@ describe("MarkdownFileTreeDrawer", () => {
         open
         outlineItems={[]}
         rootName="Obsidian Vault"
+        onCreateFile={() => {}}
         onOpenFile={() => {}}
         onSelectOutlineItem={() => {}}
       />
@@ -427,7 +428,13 @@ describe("MarkdownFileTreeDrawer", () => {
 
     expect(screen.getByRole("button", { name: "deploy" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "deploy/deploy.md" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More file actions" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand folders" })).toContainElement(container.querySelector(".lucide-list-chevrons-up-down"));
+    expect(
+      within(screen.getByText("Obsidian Vault").parentElement?.parentElement as HTMLElement)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"))
+    ).toEqual(["Sort files", "Expand folders", "New"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand folders" }));
 
@@ -439,6 +446,72 @@ describe("MarkdownFileTreeDrawer", () => {
 
     expect(screen.getByRole("button", { name: "deploy" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "deploy/deploy.md" })).not.toBeInTheDocument();
+  });
+
+  it("sorts file tree entries by name, modified time, and created time", () => {
+    render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/alpha.md"
+        files={[
+          {
+            kind: "folder",
+            name: "zeta",
+            path: "/vault/zeta",
+            relativePath: "zeta",
+            createdAt: 200,
+            modifiedAt: 900
+          },
+          {
+            kind: "folder",
+            name: "alpha",
+            path: "/vault/alpha",
+            relativePath: "alpha",
+            createdAt: 800,
+            modifiedAt: 100
+          },
+          {
+            name: "zed.md",
+            path: "/vault/zed.md",
+            relativePath: "zed.md",
+            createdAt: 700,
+            modifiedAt: 300
+          },
+          {
+            name: "alpha.md",
+            path: "/vault/alpha.md",
+            relativePath: "alpha.md",
+            createdAt: 100,
+            modifiedAt: 600
+          }
+        ]}
+        open
+        outlineItems={[]}
+        rootName="Obsidian Vault"
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+    const tree = screen.getByRole("tree", { name: "Markdown files" });
+    const treeRows = () => within(tree).getAllByRole("button").map((button) => button.textContent);
+
+    expect(treeRows()).toEqual(["alpha", "zeta", "alpha.md", "zed.md"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort files" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Modified time" }));
+
+    expect(screen.queryByRole("button", { name: "Descending" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "Descending" })).toHaveAttribute("aria-checked", "true");
+    expect(treeRows()).toEqual(["zeta", "alpha", "alpha.md", "zed.md"]);
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Ascending" }));
+
+    expect(screen.getByRole("menuitemradio", { name: "Ascending" })).toHaveAttribute("aria-checked", "true");
+    expect(treeRows()).toEqual(["alpha", "zeta", "zed.md", "alpha.md"]);
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Created time" }));
+
+    expect(screen.getByRole("menuitemradio", { name: "Descending" })).toHaveAttribute("aria-checked", "true");
+    expect(treeRows()).toEqual(["alpha", "zeta", "zed.md", "alpha.md"]);
   });
 
   it("opens image assets from the file tree and supports renaming them", () => {
@@ -510,7 +583,8 @@ describe("MarkdownFileTreeDrawer", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New file" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "New file" }));
     const newFileInput = screen.getByRole("textbox", { name: "New file name" });
     fireEvent.change(newFileInput, { target: { value: "Daily note" } });
     fireEvent.keyDown(newFileInput, { key: "Enter" });
@@ -549,7 +623,8 @@ describe("MarkdownFileTreeDrawer", () => {
         />
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "New from template" }));
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      expect(screen.getByText("New from template")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("menuitem", { name: "Daily note" }));
 
       const newFileInput = screen.getByRole("textbox", { name: "New file name" });
@@ -596,7 +671,7 @@ describe("MarkdownFileTreeDrawer", () => {
         />
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "New from template" }));
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
       fireEvent.click(screen.getByRole("menuitem", { name: "Standup" }));
 
       const newFileInput = screen.getByRole("textbox", { name: "New file name" });
@@ -637,7 +712,7 @@ describe("MarkdownFileTreeDrawer", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New from template" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     expect(screen.getByRole("menuitem", { name: "Daily note edited" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Daily note" })).not.toBeInTheDocument();
