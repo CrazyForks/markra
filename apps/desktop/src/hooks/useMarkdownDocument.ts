@@ -23,6 +23,7 @@ import {
   type NativeMarkdownFile,
   type NativeMarkdownFolderFile
 } from "../lib/tauri";
+import { normalizeMovedPath, replaceMovedPath } from "../lib/path-move";
 import { setNativeWindowTitle } from "../lib/tauri";
 import { pathNameFromPath, type DocumentState } from "@markra/shared";
 
@@ -168,13 +169,9 @@ function isEquivalentEditorMarkdown(left: string, right: string) {
   return comparableMarkdown(left) === comparableMarkdown(right);
 }
 
-function normalizeDocumentPath(path: string) {
-  return path.replace(/\\/gu, "/").replace(/\/+$/u, "");
-}
-
 function isDeletedDocumentPath(documentPath: string, deletedPath: string) {
-  const normalizedDocumentPath = normalizeDocumentPath(documentPath);
-  const normalizedDeletedPath = normalizeDocumentPath(deletedPath);
+  const normalizedDocumentPath = normalizeMovedPath(documentPath);
+  const normalizedDeletedPath = normalizeMovedPath(deletedPath);
 
   return normalizedDocumentPath === normalizedDeletedPath || normalizedDocumentPath.startsWith(`${normalizedDeletedPath}/`);
 }
@@ -723,6 +720,45 @@ export function useMarkdownDocument({
     return true;
   }, [registerWindowRestoreState, setActiveDocument]);
 
+  const replaceMovedOpenDocumentFile = useCallback((previousPath: string, file: NativeMarkdownFolderFile) => {
+    const movedPathFor = (path: string | null) => (path ? replaceMovedPath(path, previousPath, file.path) : path);
+    const affected =
+      tabsRef.current.some((tab) => tab.path !== null && movedPathFor(tab.path) !== tab.path) ||
+      (documentRef.current.path !== null && movedPathFor(documentRef.current.path) !== documentRef.current.path);
+    if (!affected) return false;
+
+    const current = documentRef.current;
+    if (current.path !== null) {
+      const nextPath = movedPathFor(current.path);
+      if (nextPath !== current.path) {
+        setActiveDocument({
+          ...current,
+          name: current.path === previousPath ? file.name : current.name,
+          path: nextPath
+        });
+      }
+    }
+
+    const nextTabs = tabsRef.current.map((tab) => {
+      const nextPath = movedPathFor(tab.path);
+      if (nextPath === tab.path) return tab;
+
+      return {
+        ...tab,
+        name: tab.path === previousPath ? file.name : tab.name,
+        path: nextPath
+      };
+    });
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
+    registerWindowRestoreState(activeFilePathFromTabs(nextTabs, activeTabIdRef.current), openFilePathsFromTabs(nextTabs));
+    persistWorkspaceState({
+      filePath: activeFilePathFromTabs(nextTabs, activeTabIdRef.current),
+      openFilePaths: openFilePathsFromTabs(nextTabs)
+    });
+    return true;
+  }, [registerWindowRestoreState, setActiveDocument]);
+
   const detachDeletedDocumentFile = useCallback((path: string) => {
     const currentTabs = tabsRef.current;
     const deletedTab = currentTabs.find((tab) => tab.path !== null && isDeletedDocumentPath(tab.path, path));
@@ -1223,6 +1259,7 @@ export function useMarkdownDocument({
     openTreeMarkdownFile,
     outlineItems,
     replaceOpenDocumentFile,
+    replaceMovedOpenDocumentFile,
     saveCurrentDocument,
     saveMarkdownTab,
     selectMarkdownTab,

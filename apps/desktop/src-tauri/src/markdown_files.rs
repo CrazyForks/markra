@@ -938,6 +938,36 @@ fn canonical_markdown_tree_entry(root: &Path, path: &Path) -> Result<PathBuf, St
     Err("Path is not a Markdown file, supported image asset, or folder".to_string())
 }
 
+fn canonical_movable_markdown_tree_entry(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let canonical_path = path.canonicalize().map_err(|error| error.to_string())?;
+
+    canonical_path
+        .strip_prefix(root)
+        .map_err(|_| "File is outside the current Markdown folder".to_string())?;
+
+    if canonical_path == root {
+        return Err("Cannot move the current Markdown folder root".to_string());
+    }
+
+    if canonical_path.is_dir()
+        || (canonical_path.is_file()
+            && (is_markdown_tree_file(&canonical_path)
+                || is_markdown_tree_asset_file(&canonical_path)))
+    {
+        return Ok(canonical_path);
+    }
+
+    Err("Path is not a Markdown file, supported image asset, or folder".to_string())
+}
+
+fn markdown_tree_entry_kind(path: &Path) -> Result<MarkdownFolderEntryKind, String> {
+    if path.is_dir() {
+        return Ok(MarkdownFolderEntryKind::Folder);
+    }
+
+    markdown_tree_file_kind(path)
+}
+
 fn ensure_markdown_tree_parent(root: &Path, parent: &Path) -> Result<(), String> {
     let canonical_parent = parent.canonicalize().map_err(|error| error.to_string())?;
     canonical_parent
@@ -1218,6 +1248,40 @@ pub(crate) fn rename_markdown_tree_file(
     fs::rename(&source_path, &target_path).map_err(|error| error.to_string())?;
 
     markdown_folder_file(&root, &target_path, markdown_tree_file_kind(&target_path)?)
+}
+
+#[tauri::command]
+pub(crate) fn move_markdown_tree_file(
+    root_path: String,
+    path: String,
+    target_parent_path: Option<String>,
+) -> Result<MarkdownFolderFile, String> {
+    let root_path = PathBuf::from(root_path);
+    let root = canonical_markdown_tree_root(&root_path)?;
+    let source_path = canonical_movable_markdown_tree_entry(&root, &PathBuf::from(path))?;
+    let target_parent = markdown_tree_target_parent(&root, target_parent_path)?;
+    let source_name = source_path
+        .file_name()
+        .ok_or_else(|| "File name is invalid".to_string())?;
+    let target_path = target_parent.join(source_name);
+
+    ensure_markdown_tree_parent(&root, &target_parent)?;
+
+    if source_path.is_dir()
+        && (target_parent == source_path || target_parent.starts_with(&source_path))
+    {
+        return Err("Cannot move a folder into itself".to_string());
+    }
+
+    if target_path.exists() && target_path != source_path {
+        return Err("File already exists".to_string());
+    }
+
+    if target_path != source_path {
+        fs::rename(&source_path, &target_path).map_err(|error| error.to_string())?;
+    }
+
+    markdown_folder_file(&root, &target_path, markdown_tree_entry_kind(&target_path)?)
 }
 
 #[tauri::command]
@@ -1967,6 +2031,142 @@ mod tests {
         .is_err());
 
         fs::remove_dir_all(root).expect("test tree should be removed");
+    }
+
+    #[test]
+    fn moves_markdown_tree_files_and_folders_inside_the_root() {
+        let root = std::env::temp_dir().join(format!(
+            "markra-tree-move-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+
+        let docs = root.join("docs");
+        let archive = root.join("archive");
+        fs::create_dir_all(&docs).expect("source folder should be created");
+        fs::create_dir_all(&archive).expect("target folder should be created");
+        fs::write(docs.join("guide.md"), "# Guide").expect("markdown file should be created");
+        fs::write(docs.join("notes.md"), "# Notes")
+            .expect("nested markdown file should be created");
+        let canonical_root = root
+            .canonicalize()
+            .expect("test folder should have a canonical path");
+
+        let moved_file = move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            docs.join("guide.md").to_string_lossy().to_string(),
+            Some(archive.to_string_lossy().to_string()),
+        )
+        .expect("markdown file should move into the target folder");
+
+        assert_markdown_folder_file(
+            &moved_file,
+            MarkdownFolderEntryKind::File,
+            &canonical_root.join("archive").join("guide.md"),
+            "archive/guide.md",
+        );
+        assert!(!docs.join("guide.md").exists());
+        assert_eq!(
+            fs::read_to_string(archive.join("guide.md"))
+                .expect("moved markdown file should be readable"),
+            "# Guide"
+        );
+
+        let moved_folder = move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            docs.to_string_lossy().to_string(),
+            Some(archive.to_string_lossy().to_string()),
+        )
+        .expect("markdown folder should move into the target folder");
+
+        assert_markdown_folder_file(
+            &moved_folder,
+            MarkdownFolderEntryKind::Folder,
+            &canonical_root.join("archive").join("docs"),
+            "archive/docs",
+        );
+        assert!(!docs.exists());
+        assert_eq!(
+            fs::read_to_string(archive.join("docs").join("notes.md"))
+                .expect("nested moved markdown file should be readable"),
+            "# Notes"
+        );
+
+        let moved_back_to_root = move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            archive.join("guide.md").to_string_lossy().to_string(),
+            None,
+        )
+        .expect("markdown file should move back to the root");
+
+        assert_markdown_folder_file(
+            &moved_back_to_root,
+            MarkdownFolderEntryKind::File,
+            &canonical_root.join("guide.md"),
+            "guide.md",
+        );
+        assert!(!archive.join("guide.md").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("guide.md"))
+                .expect("root moved markdown file should be readable"),
+            "# Guide"
+        );
+
+        fs::remove_dir_all(root).expect("test tree should be removed");
+    }
+
+    #[test]
+    fn rejects_invalid_markdown_tree_moves() {
+        let root = std::env::temp_dir().join(format!(
+            "markra-tree-move-boundary-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+        let sibling = root.with_file_name(format!(
+            "{}-sibling",
+            root.file_name()
+                .and_then(|name| name.to_str())
+                .expect("root should have a file name")
+        ));
+
+        let docs = root.join("docs");
+        let child = docs.join("child");
+        let archive = root.join("archive");
+        fs::create_dir_all(&child).expect("nested source folder should be created");
+        fs::create_dir_all(&archive).expect("target folder should be created");
+        fs::create_dir_all(&sibling).expect("sibling folder should be created");
+        fs::write(docs.join("guide.md"), "# Guide").expect("markdown file should be created");
+        fs::write(archive.join("guide.md"), "# Existing")
+            .expect("conflicting file should be created");
+        fs::write(sibling.join("outside.md"), "# Outside").expect("outside file should be created");
+
+        assert!(move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            sibling.join("outside.md").to_string_lossy().to_string(),
+            Some(archive.to_string_lossy().to_string())
+        )
+        .is_err());
+        assert!(move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            docs.to_string_lossy().to_string(),
+            Some(child.to_string_lossy().to_string())
+        )
+        .is_err());
+        assert!(move_markdown_tree_file(
+            root.to_string_lossy().to_string(),
+            docs.join("guide.md").to_string_lossy().to_string(),
+            Some(archive.to_string_lossy().to_string())
+        )
+        .is_err());
+        assert!(docs.join("guide.md").exists());
+        assert!(sibling.join("outside.md").exists());
+
+        fs::remove_dir_all(root).expect("test tree should be removed");
+        fs::remove_dir_all(sibling).expect("sibling tree should be removed");
     }
 
     #[test]

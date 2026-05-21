@@ -14,6 +14,12 @@ const markdownFiles = [
   { name: "deploy.md", path: "/vault/deploy/deploy.md", relativePath: "deploy/deploy.md" }
 ];
 
+async function settleFileTreeDrag() {
+  await new Promise((resolve) => {
+    window.setTimeout(resolve, 60);
+  });
+}
+
 describe("MarkdownFileTreeDrawer", () => {
   beforeEach(() => {
     mockedShowNativeMarkdownFileTreeContextMenu.mockReset();
@@ -644,6 +650,74 @@ describe("MarkdownFileTreeDrawer", () => {
     }
   });
 
+  it("starts root create actions inside the current file parent folder", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T09:30:00"));
+    const createFile = vi.fn();
+    const createFolder = vi.fn();
+
+    try {
+      const { rerender } = render(
+        <MarkdownFileTreeDrawer
+          currentPath="/vault/deploy/deploy.md"
+          files={markdownFiles}
+          open
+          outlineItems={[]}
+          rootPath="/vault"
+          rootName="Obsidian Vault"
+          onCreateFile={createFile}
+          onCreateFolder={createFolder}
+          onOpenFile={() => {}}
+          onSelectOutlineItem={() => {}}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "New file" }));
+      const newFileInput = screen.getByRole("textbox", { name: "New file name" });
+      fireEvent.change(newFileInput, { target: { value: "Sprint note" } });
+      fireEvent.keyDown(newFileInput, { key: "Enter" });
+
+      expect(createFile).toHaveBeenCalledWith("Sprint note", "/vault/deploy");
+
+      rerender(
+        <MarkdownFileTreeDrawer
+          currentPath="/vault/deploy/deploy.md"
+          files={markdownFiles}
+          open
+          outlineItems={[]}
+          rootPath="/vault"
+          rootName="Obsidian Vault"
+          onCreateFile={createFile}
+          onCreateFolder={createFolder}
+          onOpenFile={() => {}}
+          onSelectOutlineItem={() => {}}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Daily note" }));
+      const templateInput = screen.getByRole("textbox", { name: "New file name" });
+      fireEvent.keyDown(templateInput, { key: "Enter" });
+
+      expect(createFile).toHaveBeenLastCalledWith(
+        "2026-05-21",
+        "/vault/deploy",
+        expect.stringContaining("# 2026-05-21")
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "New" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+      const newFolderInput = screen.getByRole("textbox", { name: "New folder name" });
+      fireEvent.change(newFolderInput, { target: { value: "Research" } });
+      fireEvent.keyDown(newFolderInput, { key: "Enter" });
+
+      expect(createFolder).toHaveBeenCalledWith("Research", "/vault/deploy");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("starts a markdown file from a custom template", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-21T09:30:00"));
@@ -896,6 +970,372 @@ describe("MarkdownFileTreeDrawer", () => {
     fireEvent.keyDown(newFolderInput, { key: "Enter" });
 
     expect(createFolder).toHaveBeenCalledWith("Research", "/vault/deploy");
+  });
+
+  it("moves folders onto other folders and nested files back to the root", async () => {
+    const moveFile = vi.fn();
+
+    const { container } = render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={[
+          ...markdownFiles,
+          { kind: "folder", name: "archive", path: "/vault/archive", relativePath: "archive" }
+        ]}
+        open
+        outlineItems={[]}
+        rootPath="/vault"
+        rootName="Obsidian Vault"
+        onMoveFile={moveFile}
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    const deployFolder = screen.getByRole("button", { name: "deploy" });
+    const archiveFolder = screen.getByRole("button", { name: "archive" });
+    vi.spyOn(deployFolder, "getBoundingClientRect").mockReturnValue({
+      bottom: 32,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 0,
+      width: 260,
+      x: 0,
+      y: 0,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(archiveFolder, "getBoundingClientRect").mockReturnValue({
+      bottom: 64,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 32,
+      width: 260,
+      x: 0,
+      y: 32,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(deployFolder, { button: 0, clientX: 20, clientY: 16 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 28 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 48 });
+    fireEvent.mouseUp(document, { clientX: 24, clientY: 48 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "folder",
+        path: "/vault/deploy",
+        relativePath: "deploy"
+      }),
+      "/vault/archive"
+    );
+
+    fireEvent.click(deployFolder);
+    const nestedFile = screen.getByRole("button", { name: "deploy/deploy.md" });
+    const scroll = container.querySelector(".file-tree-scroll") as HTMLElement;
+    vi.spyOn(nestedFile, "getBoundingClientRect").mockReturnValue({
+      bottom: 96,
+      height: 32,
+      left: 20,
+      right: 260,
+      top: 64,
+      width: 240,
+      x: 20,
+      y: 64,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(scroll, "getBoundingClientRect").mockReturnValue({
+      bottom: 260,
+      height: 220,
+      left: 0,
+      right: 260,
+      top: 40,
+      width: 260,
+      x: 0,
+      y: 40,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(nestedFile, { button: 0, clientX: 40, clientY: 80 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 44, clientY: 120 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 44, clientY: 180 });
+    fireEvent.mouseUp(document, { clientX: 44, clientY: 180 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).toHaveBeenLastCalledWith(
+      markdownFiles[2],
+      null
+    );
+  });
+
+  it("moves files and folders with pointer dragging in the file tree", async () => {
+    const moveFile = vi.fn();
+
+    render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={[
+          ...markdownFiles,
+          { kind: "folder", name: "archive", path: "/vault/archive", relativePath: "archive" }
+        ]}
+        open
+        outlineItems={[]}
+        rootPath="/vault"
+        rootName="Obsidian Vault"
+        onMoveFile={moveFile}
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    const deployFolder = screen.getByRole("button", { name: "deploy" });
+    const awsFile = screen.getByRole("button", { name: "AWS.md" });
+    vi.spyOn(awsFile, "getBoundingClientRect").mockReturnValue({
+      bottom: 72,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 40,
+      width: 260,
+      x: 0,
+      y: 40,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(deployFolder, "getBoundingClientRect").mockReturnValue({
+      bottom: 32,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 0,
+      width: 260,
+      x: 0,
+      y: 0,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(awsFile, { button: 0, clientX: 20, clientY: 56 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 42 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 16 });
+
+    expect(screen.getByTestId("file-tree-drag-overlay")).toHaveTextContent("AWS.md");
+    expect(deployFolder).toHaveClass("bg-(--bg-active)");
+
+    fireEvent.mouseUp(document, { clientX: 24, clientY: 16 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).toHaveBeenCalledWith(markdownFiles[1], "/vault/deploy");
+  });
+
+  it("moves a file into an expanded folder when dropped over its child list", async () => {
+    const moveFile = vi.fn();
+
+    render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={markdownFiles}
+        open
+        outlineItems={[]}
+        rootPath="/vault"
+        rootName="Obsidian Vault"
+        onMoveFile={moveFile}
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    const deployFolder = screen.getByRole("button", { name: "deploy" });
+    fireEvent.click(deployFolder);
+
+    const deployChildren = screen.getByRole("group", { name: "deploy children" });
+    const awsFile = screen.getByRole("button", { name: "AWS.md" });
+    vi.spyOn(awsFile, "getBoundingClientRect").mockReturnValue({
+      bottom: 128,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 96,
+      width: 260,
+      x: 0,
+      y: 96,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(deployChildren, "getBoundingClientRect").mockReturnValue({
+      bottom: 92,
+      height: 60,
+      left: 20,
+      right: 260,
+      top: 32,
+      width: 240,
+      x: 20,
+      y: 32,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(awsFile, { button: 0, clientX: 20, clientY: 112 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 36, clientY: 96 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 36, clientY: 72 });
+
+    expect(deployFolder).toHaveClass("bg-(--bg-active)");
+    expect(deployChildren).toHaveClass("bg-(--bg-active)");
+
+    fireEvent.mouseUp(document, { clientX: 36, clientY: 72 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).toHaveBeenCalledWith(markdownFiles[1], "/vault/deploy");
+  });
+
+  it("does not move items into their current parent or themselves", async () => {
+    const moveFile = vi.fn();
+    const { container } = render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={markdownFiles}
+        open
+        outlineItems={[]}
+        rootPath="/vault"
+        rootName="Obsidian Vault"
+        onMoveFile={moveFile}
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    const deployFolder = screen.getByRole("button", { name: "deploy" });
+    const awsFile = screen.getByRole("button", { name: "AWS.md" });
+    const scroll = container.querySelector(".file-tree-scroll") as HTMLElement;
+    vi.spyOn(awsFile, "getBoundingClientRect").mockReturnValue({
+      bottom: 72,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 40,
+      width: 260,
+      x: 0,
+      y: 40,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(scroll, "getBoundingClientRect").mockReturnValue({
+      bottom: 260,
+      height: 220,
+      left: 0,
+      right: 260,
+      top: 40,
+      width: 260,
+      x: 0,
+      y: 40,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(awsFile, { button: 0, clientX: 20, clientY: 56 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 100 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 24, clientY: 180 });
+    fireEvent.mouseUp(document, { clientX: 24, clientY: 180 });
+    await settleFileTreeDrag();
+
+    fireEvent.click(deployFolder);
+    const deployChildren = screen.getByRole("group", { name: "deploy children" });
+    vi.spyOn(deployFolder, "getBoundingClientRect").mockReturnValue({
+      bottom: 32,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 0,
+      width: 260,
+      x: 0,
+      y: 0,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(deployChildren, "getBoundingClientRect").mockReturnValue({
+      bottom: 92,
+      height: 60,
+      left: 20,
+      right: 260,
+      top: 32,
+      width: 240,
+      x: 20,
+      y: 32,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(deployFolder, { button: 0, clientX: 20, clientY: 16 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 36, clientY: 44 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 36, clientY: 72 });
+    fireEvent.mouseUp(document, { clientX: 36, clientY: 72 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).not.toHaveBeenCalled();
+  });
+
+  it("uses the innermost expanded child list as the drop target", async () => {
+    const moveFile = vi.fn();
+
+    render(
+      <MarkdownFileTreeDrawer
+        currentPath="/vault/Untitled.md"
+        files={[
+          ...markdownFiles,
+          { kind: "folder", name: "child", path: "/vault/deploy/child", relativePath: "deploy/child" },
+          { name: "inside.md", path: "/vault/deploy/child/inside.md", relativePath: "deploy/child/inside.md" }
+        ]}
+        open
+        outlineItems={[]}
+        rootPath="/vault"
+        rootName="Obsidian Vault"
+        onMoveFile={moveFile}
+        onOpenFile={() => {}}
+        onSelectOutlineItem={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "deploy" }));
+    fireEvent.click(screen.getByRole("button", { name: "child" }));
+
+    const deployChildren = screen.getByRole("group", { name: "deploy children" });
+    const childChildren = screen.getByRole("group", { name: "child children" });
+    const awsFile = screen.getByRole("button", { name: "AWS.md" });
+    vi.spyOn(awsFile, "getBoundingClientRect").mockReturnValue({
+      bottom: 180,
+      height: 32,
+      left: 0,
+      right: 260,
+      top: 148,
+      width: 260,
+      x: 0,
+      y: 148,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(deployChildren, "getBoundingClientRect").mockReturnValue({
+      bottom: 140,
+      height: 108,
+      left: 20,
+      right: 260,
+      top: 32,
+      width: 240,
+      x: 20,
+      y: 32,
+      toJSON: () => ({})
+    } as DOMRect);
+    vi.spyOn(childChildren, "getBoundingClientRect").mockReturnValue({
+      bottom: 120,
+      height: 56,
+      left: 40,
+      right: 260,
+      top: 64,
+      width: 220,
+      x: 40,
+      y: 64,
+      toJSON: () => ({})
+    } as DOMRect);
+
+    fireEvent.mouseDown(awsFile, { button: 0, clientX: 20, clientY: 164 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 60, clientY: 132 });
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 60, clientY: 88 });
+    fireEvent.mouseUp(document, { clientX: 60, clientY: 88 });
+    await settleFileTreeDrag();
+
+    expect(moveFile).toHaveBeenCalledWith(markdownFiles[1], "/vault/deploy/child");
   });
 
   it("opens a folder context menu with a delete action for that folder", () => {

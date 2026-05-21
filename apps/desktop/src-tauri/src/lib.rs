@@ -17,8 +17,8 @@ use image_upload::{upload_s3_image, upload_webdav_image};
 use markdown_files::{
     create_markdown_tree_file, create_markdown_tree_folder, delete_markdown_template_file,
     delete_markdown_tree_file, export_pdf_file, list_markdown_files_for_path,
-    open_markdown_file_in_new_window, open_markdown_folder_in_new_window, open_markdown_path,
-    read_markdown_file, read_markdown_image_file, read_markdown_template_file,
+    move_markdown_tree_file, open_markdown_file_in_new_window, open_markdown_folder_in_new_window,
+    open_markdown_path, read_markdown_file, read_markdown_image_file, read_markdown_template_file,
     rename_markdown_tree_file, resolve_markdown_path, save_clipboard_image, write_markdown_file,
     write_markdown_template_file,
 };
@@ -103,6 +103,7 @@ pub fn run() {
             create_markdown_tree_folder,
             install_application_menu,
             rename_markdown_tree_file,
+            move_markdown_tree_file,
             delete_markdown_tree_file,
             open_markdown_file_in_new_window,
             open_markdown_folder_in_new_window,

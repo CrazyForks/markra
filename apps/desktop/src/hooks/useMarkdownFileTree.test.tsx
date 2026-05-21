@@ -4,6 +4,7 @@ import {
   createNativeMarkdownTreeFolder,
   deleteNativeMarkdownTreeFile,
   listNativeMarkdownFilesForPath,
+  moveNativeMarkdownTreeFile,
   openNativeMarkdownFolder,
   renameNativeMarkdownTreeFile,
   watchNativeMarkdownTree
@@ -23,6 +24,7 @@ vi.mock("../lib/tauri", () => ({
   createNativeMarkdownTreeFolder: vi.fn(),
   deleteNativeMarkdownTreeFile: vi.fn(),
   listNativeMarkdownFilesForPath: vi.fn(),
+  moveNativeMarkdownTreeFile: vi.fn(),
   openNativeMarkdownFolder: vi.fn(),
   renameNativeMarkdownTreeFile: vi.fn(),
   watchNativeMarkdownTree: vi.fn()
@@ -44,6 +46,7 @@ const mockedCreateNativeMarkdownTreeFile = vi.mocked(createNativeMarkdownTreeFil
 const mockedCreateNativeMarkdownTreeFolder = vi.mocked(createNativeMarkdownTreeFolder);
 const mockedDeleteNativeMarkdownTreeFile = vi.mocked(deleteNativeMarkdownTreeFile);
 const mockedListNativeMarkdownFilesForPath = vi.mocked(listNativeMarkdownFilesForPath);
+const mockedMoveNativeMarkdownTreeFile = vi.mocked(moveNativeMarkdownTreeFile);
 const mockedOpenNativeMarkdownFolder = vi.mocked(openNativeMarkdownFolder);
 const mockedRenameNativeMarkdownTreeFile = vi.mocked(renameNativeMarkdownTreeFile);
 const mockedWatchNativeMarkdownTree = vi.mocked(watchNativeMarkdownTree);
@@ -114,6 +117,16 @@ function FileTreeProbe({ currentPath = null }: { currentPath?: string | null }) 
       </button>
       <button
         type="button"
+        onClick={() =>
+          tree.moveFile(
+            { name: "readme.md", path: "/vault/readme.md", relativePath: "readme.md" },
+            "/vault/docs"
+          )}
+      >
+        Move
+      </button>
+      <button
+        type="button"
         onClick={() => tree.deleteFile({ name: "renamed.md", path: "/vault/renamed.md", relativePath: "renamed.md" })}
       >
         Delete
@@ -138,6 +151,7 @@ describe("useMarkdownFileTree", () => {
     mockedCreateNativeMarkdownTreeFolder.mockReset();
     mockedDeleteNativeMarkdownTreeFile.mockReset();
     mockedListNativeMarkdownFilesForPath.mockReset();
+    mockedMoveNativeMarkdownTreeFile.mockReset();
     mockedOpenNativeMarkdownFolder.mockReset();
     mockedRenameNativeMarkdownTreeFile.mockReset();
     mockedWatchNativeMarkdownTree.mockReset();
@@ -166,6 +180,11 @@ describe("useMarkdownFileTree", () => {
       name: "renamed.md",
       path: "/vault/renamed.md",
       relativePath: "renamed.md"
+    });
+    mockedMoveNativeMarkdownTreeFile.mockResolvedValue({
+      name: "readme.md",
+      path: "/vault/docs/readme.md",
+      relativePath: "docs/readme.md"
     });
     mockedSaveStoredWorkspaceState.mockResolvedValue(undefined);
     mockedWatchNativeMarkdownTree.mockResolvedValue(() => {});
@@ -388,7 +407,7 @@ describe("useMarkdownFileTree", () => {
     expect(screen.getByTestId("layout-class")).toHaveTextContent("transition-[grid-template-columns]");
   });
 
-  it("creates folders, creates files, renames files, and deletes files through native markdown tree operations", async () => {
+  it("creates folders, creates files, moves files, renames files, and deletes files through native markdown tree operations", async () => {
     mockedOpenNativeMarkdownFolder.mockResolvedValue({
       path: "/vault",
       name: "vault"
@@ -423,6 +442,11 @@ describe("useMarkdownFileTree", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
     await waitFor(() =>
       expect(mockedRenameNativeMarkdownTreeFile).toHaveBeenCalledWith("/vault", "/vault/readme.md", "renamed.md")
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    await waitFor(() =>
+      expect(mockedMoveNativeMarkdownTreeFile).toHaveBeenCalledWith("/vault", "/vault/readme.md", "/vault/docs")
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));

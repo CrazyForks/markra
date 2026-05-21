@@ -13,6 +13,7 @@ import {
   createNativeMarkdownTreeFolder,
   deleteNativeMarkdownTreeFile,
   listNativeMarkdownFilesForPath,
+  moveNativeMarkdownTreeFile,
   openNativeMarkdownFolder,
   renameNativeMarkdownTreeFile,
   watchNativeMarkdownTree,
@@ -207,6 +208,14 @@ export function useMarkdownFileTree({ onWorkspaceSessionChange }: UseMarkdownFil
     return renamedFile;
   }, [refresh, sourcePath]);
 
+  const moveFile = useCallback(async (file: NativeMarkdownFolderFile, targetParentPath: string | null = null) => {
+    if (!sourcePath) return null;
+
+    const movedFile = await moveNativeMarkdownTreeFile(sourcePath, file.path, normalizeTreeParentPath(targetParentPath));
+    await refresh(sourcePath);
+    return movedFile;
+  }, [refresh, sourcePath]);
+
   const deleteFile = useCallback(async (file: NativeMarkdownFolderFile) => {
     if (!sourcePath) return false;
 
@@ -315,6 +324,7 @@ export function useMarkdownFileTree({ onWorkspaceSessionChange }: UseMarkdownFil
     openFolderPath,
     openRecentFolder,
     removeRecentFolder,
+    moveFile,
     rootNameForDocument,
     refresh,
     setRootFromMarkdownFilePath,

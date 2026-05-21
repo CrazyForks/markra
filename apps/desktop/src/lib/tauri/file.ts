@@ -411,6 +411,20 @@ export async function renameNativeMarkdownTreeFile(
   return markdownFolderFileFromResponse(file);
 }
 
+export async function moveNativeMarkdownTreeFile(
+  rootPath: string,
+  path: string,
+  targetParentPath: string | null = null
+): Promise<NativeMarkdownFolderFile> {
+  const file = await invoke<MarkdownFolderFileResponse>("move_markdown_tree_file", {
+    path,
+    rootPath,
+    targetParentPath: normalizeNativeParentPath(targetParentPath)
+  });
+
+  return markdownFolderFileFromResponse(file);
+}
+
 export async function deleteNativeMarkdownTreeFile(rootPath: string, path: string) {
   await invoke("delete_markdown_tree_file", {
     path,

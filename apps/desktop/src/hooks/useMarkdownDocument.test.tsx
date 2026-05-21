@@ -696,6 +696,57 @@ describe("useMarkdownDocument", () => {
     });
   });
 
+  it("updates open tree document paths when their containing folder is moved", async () => {
+    mockedReadNativeMarkdownFile.mockImplementation(async (path) => ({
+      content: path.endsWith("guide.md") ? "# Guide" : "# Notes",
+      name: path.endsWith("guide.md") ? "guide.md" : "notes.md",
+      path
+    }));
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        documentTabsEnabled: true,
+        getCurrentMarkdown: (fallbackContent) => fallbackContent,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    await act(async () => {
+      await result.current.openTreeMarkdownFile({
+        name: "guide.md",
+        path: "/mock-files/docs/guide.md",
+        relativePath: "docs/guide.md"
+      });
+    });
+    await act(async () => {
+      await result.current.openTreeMarkdownFileInBackground({
+        name: "notes.md",
+        path: "/mock-files/docs/notes.md",
+        relativePath: "docs/notes.md"
+      });
+    });
+
+    act(() => {
+      expect(result.current.replaceMovedOpenDocumentFile("/mock-files/docs", {
+        kind: "folder",
+        name: "docs",
+        path: "/mock-files/archive/docs",
+        relativePath: "archive/docs"
+      })).toBe(true);
+    });
+
+    expect(result.current.document).toMatchObject({
+      name: "guide.md",
+      path: "/mock-files/archive/docs/guide.md"
+    });
+    expect(result.current.tabs.map((tab) => tab.path)).toEqual([
+      "/mock-files/archive/docs/guide.md",
+      "/mock-files/archive/docs/notes.md"
+    ]);
+  });
+
   it("skips a restored folder workspace when the folder no longer opens", async () => {
     const onTreeRootFromFolderPath = vi.fn(async () => null);
     mockedGetStoredWorkspaceState.mockResolvedValue({

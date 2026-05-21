@@ -71,6 +71,7 @@ import { buildMarkdownHtmlDocument, exportDocumentFileName, localFileUrlFromPath
 import { resolveMarkdownDocumentLinkFile } from "./lib/document-links";
 import type { EditorContentWidth } from "./lib/editor-width";
 import { saveEditorImage } from "./lib/image-upload";
+import { replaceMovedPath } from "./lib/path-move";
 import { selectionAnchorFromDomSelection, type SelectionAnchor } from "./lib/selection-anchor";
 import { openNativeExternalUrl, openSettingsWindow } from "./lib/tauri";
 import { aiAgentWebSearchAvailable, type AiDiffResult, type AiEditIntent, type AiSelectionContext } from "@markra/ai";
@@ -358,6 +359,7 @@ export default function App() {
     createFile: createMarkdownTreeFile,
     createFolder: createMarkdownTreeFolder,
     deleteFile: deleteMarkdownTreeFile,
+    moveFile: moveMarkdownTreeFile,
     open: fileTreeOpen,
     openFolderPath,
     openMarkdownFolder,
@@ -416,6 +418,7 @@ export default function App() {
     openTreeMarkdownFile,
     outlineItems,
     replaceOpenDocumentFile,
+    replaceMovedOpenDocumentFile,
     saveCurrentDocument,
     saveMarkdownTab,
     selectMarkdownTab,
@@ -1423,6 +1426,33 @@ export default function App() {
     ));
     setActiveImageFile((currentFile) => currentFile?.path === previousPath ? renamedFile : currentFile);
   }, [persistSideDocumentGroupPathUpdate, replaceOpenDocumentFile]);
+  const applyMovedTreeFile = useCallback((
+    previousFile: NativeMarkdownFolderFile,
+    movedFile: NativeMarkdownFolderFile
+  ) => {
+    const moveFolderFile = (file: NativeMarkdownFolderFile): NativeMarkdownFolderFile => {
+      const nextPath = replaceMovedPath(file.path, previousFile.path, movedFile.path);
+      if (nextPath === file.path) return file;
+
+      return {
+        ...file,
+        name: file.path === previousFile.path ? movedFile.name : file.name,
+        path: nextPath,
+        relativePath: replaceMovedPath(file.relativePath, previousFile.relativePath, movedFile.relativePath)
+      };
+    };
+
+    replaceMovedOpenDocumentFile(previousFile.path, movedFile);
+    persistSideDocumentGroupPathUpdate({
+      nextPath: movedFile.path,
+      previousPath: previousFile.path
+    });
+    setImageTabs((currentTabs) => currentTabs.map((tab) => {
+      const movedTab = moveFolderFile(tab);
+      return movedTab === tab ? tab : createImageDocumentTab(movedTab);
+    }));
+    setActiveImageFile((currentFile) => currentFile ? moveFolderFile(currentFile) : currentFile);
+  }, [persistSideDocumentGroupPathUpdate, replaceMovedOpenDocumentFile]);
   const handleCreateMarkdownTreeFolder = useCallback(async (folderName: string, parentPath: string | null = null) => {
     try {
       await createMarkdownTreeFolder(folderName, parentPath);
@@ -1438,6 +1468,17 @@ export default function App() {
       // Keep the existing tree state if the native rename fails.
     }
   }, [applyRenamedTreeFile, renameMarkdownTreeFile]);
+  const handleMoveMarkdownTreeFile = useCallback(async (
+    file: NativeMarkdownFolderFile,
+    targetParentPath: string | null
+  ) => {
+    try {
+      const movedFile = await moveMarkdownTreeFile(file, targetParentPath);
+      if (movedFile) applyMovedTreeFile(file, movedFile);
+    } catch {
+      // Keep the existing tree state if the native move fails.
+    }
+  }, [applyMovedTreeFile, moveMarkdownTreeFile]);
   const handleDeleteMarkdownTreeFile = useCallback(async (file: NativeMarkdownFolderFile) => {
     const fileIsFolder = file.kind === "folder";
     const confirmed = await confirmNativeMarkdownFileDelete(file.name, {
@@ -2396,6 +2437,7 @@ export default function App() {
               onCreateFile={handleCreateMarkdownTreeFile}
               onCreateFolder={handleCreateMarkdownTreeFolder}
               onDeleteFile={handleDeleteMarkdownTreeFile}
+              onMoveFile={handleMoveMarkdownTreeFile}
               onOpenFile={handleOpenTreeFile}
               onOpenFileToSide={
                 editorPreferences.preferences.showDocumentTabs

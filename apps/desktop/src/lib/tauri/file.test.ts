@@ -13,6 +13,7 @@ import {
   installNativeMarkdownFileDrop,
   listenNativeOpenedMarkdownPaths,
   listNativeMarkdownFilesForPath,
+  moveNativeMarkdownTreeFile,
   takeNativeOpenedMarkdownPaths,
   openNativeMarkdownFolder,
   openNativeMarkdownFile,
@@ -344,12 +345,13 @@ describe("native file access", () => {
     });
   });
 
-  it("creates folders, creates files, renames files, and deletes files through Tauri commands", async () => {
+  it("creates folders, creates files, moves files, renames files, and deletes files through Tauri commands", async () => {
     mockedInvoke
       .mockResolvedValueOnce({ kind: "folder", path: "/mock-files/Research", relativePath: "Research" })
       .mockResolvedValueOnce({ kind: "folder", path: "/mock-files/docs/Sprint", relativePath: "docs/Sprint" })
       .mockResolvedValueOnce({ path: "/mock-files/Daily note.md", relativePath: "Daily note.md" })
       .mockResolvedValueOnce({ path: "/mock-files/Template note.md", relativePath: "Template note.md" })
+      .mockResolvedValueOnce({ path: "/mock-files/docs/readme.md", relativePath: "docs/readme.md" })
       .mockResolvedValueOnce({ path: "/mock-files/Renamed.md", relativePath: "Renamed.md" })
       .mockResolvedValueOnce(undefined);
 
@@ -372,6 +374,11 @@ describe("native file access", () => {
     });
     await createNativeMarkdownTreeFile(mockFolderPath, "Template note", {
       contents: "# Template note\n\nFrom template."
+    });
+    await expect(moveNativeMarkdownTreeFile(mockFolderPath, mockReadmePath, "/mock-files/docs")).resolves.toEqual({
+      name: "readme.md",
+      path: "/mock-files/docs/readme.md",
+      relativePath: "docs/readme.md"
     });
     await expect(renameNativeMarkdownTreeFile(mockFolderPath, mockReadmePath, "Renamed.md")).resolves.toEqual({
       name: "Renamed.md",
@@ -401,12 +408,17 @@ describe("native file access", () => {
       rootPath: mockFolderPath,
       contents: "# Template note\n\nFrom template."
     });
-    expect(mockedInvoke).toHaveBeenNthCalledWith(5, "rename_markdown_tree_file", {
+    expect(mockedInvoke).toHaveBeenNthCalledWith(5, "move_markdown_tree_file", {
+      path: mockReadmePath,
+      rootPath: mockFolderPath,
+      targetParentPath: "/mock-files/docs"
+    });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(6, "rename_markdown_tree_file", {
       fileName: "Renamed.md",
       path: mockReadmePath,
       rootPath: mockFolderPath
     });
-    expect(mockedInvoke).toHaveBeenNthCalledWith(6, "delete_markdown_tree_file", {
+    expect(mockedInvoke).toHaveBeenNthCalledWith(7, "delete_markdown_tree_file", {
       path: "/mock-files/Renamed.md",
       rootPath: mockFolderPath
     });

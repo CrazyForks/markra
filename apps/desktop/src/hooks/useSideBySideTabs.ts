@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MarkdownTabsBarDocumentItem, MarkdownTabsBarItem } from "../components/MarkdownTabsBar";
+import { replaceMovedPath } from "../lib/path-move";
 import type { StoredWorkspaceSideBySideGroup, StoredWorkspaceState } from "../lib/settings/app-settings";
 import type { MarkdownDocumentTab } from "./useMarkdownDocument";
 
@@ -93,7 +94,7 @@ export function useSideBySideTabs({
     const resolveUpdatedPath = (tab: MarkdownTabsBarDocumentItem | undefined) => {
       if (!tab?.path) return null;
       if (update.tabId && tab.id === update.tabId) return update.nextPath;
-      if (update.previousPath && tab.path === update.previousPath) return update.nextPath;
+      if (update.previousPath) return replaceMovedPath(tab.path, update.previousPath, update.nextPath);
       return tab.path;
     };
     const primaryFilePath = resolveUpdatedPath(primaryTab);
