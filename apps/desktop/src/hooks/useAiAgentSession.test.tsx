@@ -554,6 +554,140 @@ describe("useAiAgentSession", () => {
     ]);
   });
 
+  it("retries an assistant answer from its original user turn", async () => {
+    mockedGetStoredAiAgentSession.mockResolvedValue(storedAgentSession({
+      messages: [
+        { id: 1, role: "user", text: "Summarize synthetic notes" },
+        { id: 2, role: "assistant", text: "Initial summary." },
+        { id: 3, role: "user", text: "List follow-up actions" },
+        { id: 4, role: "assistant", text: "Initial actions." }
+      ]
+    }));
+    mockedRunDocumentAiAgent.mockResolvedValue({
+      content: "Regenerated actions.",
+      finishReason: "stop"
+    });
+
+    const { result } = renderAiAgentSession({
+      documentPath: "/vault/example.md",
+      sessionId: "session-a",
+      workspaceKey: "/vault"
+    });
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(4));
+
+    await act(async () => {
+      await (result.current as typeof result.current & { retryMessage: (messageId: number) => Promise<unknown> }).retryMessage(4);
+    });
+
+    expect(mockedRunDocumentAiAgent).toHaveBeenCalledWith(expect.objectContaining({
+      history: [
+        {
+          preview: undefined,
+          previews: undefined,
+          role: "user",
+          text: "Summarize synthetic notes"
+        },
+        {
+          preview: undefined,
+          previews: undefined,
+          role: "assistant",
+          text: "Initial summary."
+        }
+      ],
+      prompt: "List follow-up actions"
+    }));
+    expect(result.current.messages).toEqual([
+      { id: 1, role: "user", text: "Summarize synthetic notes" },
+      { id: 2, role: "assistant", text: "Initial summary." },
+      { id: expect.any(Number), role: "user", text: "List follow-up actions" },
+      {
+        activities: [
+          {
+            id: "call:1",
+            kind: "ai_call",
+            label: "app.aiAgentTraceCall 1",
+            status: "completed",
+            turn: 1
+          }
+        ],
+        id: expect.any(Number),
+        role: "assistant",
+        text: "Regenerated actions.",
+        thinking: ""
+      }
+    ]);
+  });
+
+  it("submits an edited user turn by discarding later transcript messages", async () => {
+    mockedGetStoredAiAgentSession.mockResolvedValue(storedAgentSession({
+      messages: [
+        { id: 1, role: "user", text: "Summarize synthetic notes" },
+        { id: 2, role: "assistant", text: "Initial summary." },
+        { id: 3, role: "user", text: "List follow-up actions" },
+        { id: 4, role: "assistant", text: "Initial actions." }
+      ]
+    }));
+    mockedRunDocumentAiAgent.mockResolvedValue({
+      content: "Regenerated actions from the edited prompt.",
+      finishReason: "stop"
+    });
+
+    const { result } = renderAiAgentSession({
+      documentPath: "/vault/example.md",
+      sessionId: "session-a",
+      workspaceKey: "/vault"
+    });
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(4));
+
+    await act(async () => {
+      await (
+        result.current as typeof result.current & {
+          submitEditedMessage: (messageId: number, promptOverride: string) => Promise<unknown>;
+        }
+      ).submitEditedMessage(3, "List updated follow-up actions");
+    });
+
+    expect(mockedRunDocumentAiAgent).toHaveBeenCalledWith(expect.objectContaining({
+      history: [
+        {
+          preview: undefined,
+          previews: undefined,
+          role: "user",
+          text: "Summarize synthetic notes"
+        },
+        {
+          preview: undefined,
+          previews: undefined,
+          role: "assistant",
+          text: "Initial summary."
+        }
+      ],
+      prompt: "List updated follow-up actions"
+    }));
+    expect(result.current.messages).toEqual([
+      { id: 1, role: "user", text: "Summarize synthetic notes" },
+      { id: 2, role: "assistant", text: "Initial summary." },
+      { id: expect.any(Number), role: "user", text: "List updated follow-up actions" },
+      {
+        activities: [
+          {
+            id: "call:1",
+            kind: "ai_call",
+            label: "app.aiAgentTraceCall 1",
+            status: "completed",
+            turn: 1
+          }
+        ],
+        id: expect.any(Number),
+        role: "assistant",
+        text: "Regenerated actions from the edited prompt.",
+        thinking: ""
+      }
+    ]);
+  });
+
   it("passes the workspace file reader to the document agent runtime", async () => {
     const readWorkspaceFile = vi.fn(async () => "# Nearby");
     mockedRunDocumentAiAgent.mockResolvedValue({

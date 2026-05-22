@@ -27,6 +27,12 @@ describe("AiAgentPanel", () => {
   beforeEach(() => {
     mockedConfirmNativeAiAgentSessionDelete.mockReset();
     mockedConfirmNativeAiAgentSessionDelete.mockResolvedValue(true);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    });
   });
 
   it("renders a focused right-side agent workspace", () => {
@@ -268,9 +274,91 @@ describe("AiAgentPanel", () => {
 
     expect(screen.getByText("Summarize this note")).toBeInTheDocument();
     expect(screen.getByText("Ready for the next step.")).toBeInTheDocument();
-    expect(screen.getByText("Summarize this note").closest("li")).toHaveClass("ml-auto", "max-w-[82%]", "rounded-lg");
+    expect(screen.getByText("Summarize this note").closest("li")).toHaveClass("ml-auto", "max-w-[82%]");
+    expect(screen.getByText("Summarize this note").closest(".ai-chat-markdown")?.parentElement).toHaveClass("rounded-lg");
     expect(screen.getByText("Ready for the next step.").closest("li")).toHaveClass("mr-auto", "max-w-[86%]");
     expect(input).toHaveValue("");
+  });
+
+  it("offers copy, edit, and retry actions on transcript messages", async () => {
+    const updateDraft = vi.fn();
+    const retryMessage = vi.fn();
+    const writeText = vi.mocked(navigator.clipboard.writeText);
+    const props: Partial<AiAgentPanelProps> = {
+      draft: "Existing draft",
+      messages: [
+        { id: 1, role: "user" as const, text: "Summarize synthetic notes" },
+        { id: 2, role: "assistant" as const, text: "Synthetic answer." }
+      ],
+      onDraftChange: updateDraft,
+      onRetryMessage: retryMessage
+    };
+
+    renderAgentPanel(props);
+
+    const copyButtons = screen.getAllByRole("button", { name: "Copy message" });
+
+    fireEvent.click(copyButtons[0]);
+    expect(writeText).toHaveBeenCalledWith("Summarize synthetic notes");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument());
+
+    const editButton = screen.getByRole("button", { name: "Edit message" });
+    fireEvent.click(editButton);
+    expect(updateDraft).toHaveBeenCalledWith("Summarize synthetic notes");
+    expect(editButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Summarize synthetic notes").closest(".ai-chat-markdown")?.parentElement).toHaveClass("ring-2");
+
+    const input = screen.getByRole("textbox", { name: "Markra AI message" });
+    const cancelEditButton = screen.getByRole("button", { name: "Cancel edit" });
+    cancelEditButton.focus();
+    fireEvent.click(cancelEditButton);
+    expect(updateDraft).toHaveBeenCalledWith("Existing draft");
+    expect(screen.queryByRole("button", { name: "Cancel edit" })).not.toBeInTheDocument();
+    expect(screen.getByText("Summarize synthetic notes").closest(".ai-chat-markdown")?.parentElement).not.toHaveClass("ring-2");
+    await waitFor(() => expect(input).not.toHaveFocus());
+
+    fireEvent.click(copyButtons[1]);
+    expect(writeText).toHaveBeenCalledWith("Synthetic answer.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry message" }));
+    expect(retryMessage).toHaveBeenCalledWith(2);
+  });
+
+  it("submits an edited user message as a reset from that turn", () => {
+    const submit = vi.fn();
+    const submitEditedMessage = vi.fn();
+
+    function Harness() {
+      const [draft, setDraft] = useState("");
+
+      return (
+        <AiAgentPanel
+          draft={draft}
+          language="en"
+          messages={[
+            { id: 1, role: "user", text: "Summarize synthetic notes" },
+            { id: 2, role: "assistant", text: "Initial synthetic answer." }
+          ]}
+          open
+          onClose={() => {}}
+          onDraftChange={setDraft}
+          onSubmit={submit}
+          onSubmitEditedMessage={submitEditedMessage}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit message" }));
+    const input = screen.getByRole("textbox", { name: "Markra AI message" });
+    expect(input).toHaveValue("Summarize synthetic notes");
+
+    fireEvent.change(input, { target: { value: "Summarize updated synthetic notes" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitEditedMessage).toHaveBeenCalledWith(1, "Summarize updated synthetic notes");
   });
 
   it("does not allow sending when no document is available", () => {

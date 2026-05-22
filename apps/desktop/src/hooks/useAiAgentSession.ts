@@ -347,11 +347,15 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     };
   }, [ctx.model, ctx.provider, ctx.settingsLoading, ctx.workspaceKey, messages, sessionKey, status]);
 
-  const submit = useCallback(async (promptOverride?: string) => {
+  const submit = useCallback(async (
+    promptOverride?: string,
+    options: { baseMessages?: AiAgentPanelMessage[] } = {}
+  ) => {
     const prompt = (promptOverride ?? draft).trim();
     if (!prompt) return;
     const message = (key: I18nKey) => ctx.translate?.(key) ?? key;
     const requestId = requestIdRef.current + 1;
+    const transcriptBaseMessages = options.baseMessages ?? messages;
 
     requestIdRef.current = requestId;
     hydrationRequestIdRef.current += 1;
@@ -409,7 +413,7 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     const runThinkingEnabled = thinkingEnabled;
     const runWebSearchEnabled = webSearchEnabled;
     const runWorkspaceKey = ctx.workspaceKey ?? null;
-    const history: DocumentAiHistoryMessage[] = messages
+    const history: DocumentAiHistoryMessage[] = transcriptBaseMessages
       .filter((item) => !item.isError)
       .map((item) => ({
         preview: item.preview,
@@ -418,7 +422,7 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
         text: item.text
       }));
     const initialMessages: AiAgentPanelMessage[] = [
-      ...messages,
+      ...transcriptBaseMessages,
       { id: userMessageId, role: "user", text: prompt },
       {
         activities: createInitialAgentProcesses(message),
@@ -640,16 +644,59 @@ export function useAiAgentSession(ctx: AiAgentSessionContext) {
     }
   }, [agentModelId, agentProviderId, ctx, draft, messages, sessionKey, thinkingEnabled, webSearchEnabled]);
 
+  const retryMessage = useCallback(async (assistantMessageId: number) => {
+    if (status === "thinking" || status === "streaming") return;
+
+    const assistantMessageIndex = messages.findIndex(
+      (message) => message.id === assistantMessageId && message.role === "assistant"
+    );
+    if (assistantMessageIndex < 0) return;
+
+    let userMessageIndex = -1;
+    for (let index = assistantMessageIndex - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role !== "user") continue;
+      if (!message.text.trim()) continue;
+
+      userMessageIndex = index;
+      break;
+    }
+    if (userMessageIndex < 0) return;
+
+    const userMessage = messages[userMessageIndex];
+    if (!userMessage) return;
+
+    await submit(userMessage.text, {
+      baseMessages: messages.slice(0, userMessageIndex)
+    });
+  }, [messages, status, submit]);
+
+  const submitEditedMessage = useCallback(async (userMessageId: number, promptOverride?: string) => {
+    if (status === "thinking" || status === "streaming") return;
+
+    const userMessageIndex = messages.findIndex(
+      (message) => message.id === userMessageId && message.role === "user"
+    );
+    if (userMessageIndex < 0) return;
+
+    const prompt = promptOverride ?? messages[userMessageIndex]?.text ?? draft;
+    await submit(prompt, {
+      baseMessages: messages.slice(0, userMessageIndex)
+    });
+  }, [draft, messages, status, submit]);
+
   return {
     draft,
     interrupt,
     messages,
+    retryMessage,
     setDraft,
     setThinkingEnabled,
     setSessionThinkingEnabled: setThinkingEnabledState,
     setWebSearchEnabled,
     status,
     submit,
+    submitEditedMessage,
     thinkingEnabled,
     titleVersion,
     webSearchEnabled

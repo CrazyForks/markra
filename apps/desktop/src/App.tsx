@@ -2720,9 +2720,11 @@ export default function App() {
                 onResize={setAiAgentPanelWidth}
                 onResizeEnd={() => setAiAgentPanelResizing(false)}
                 onResizeStart={() => setAiAgentPanelResizing(true)}
+                onRetryMessage={aiAgent.retryMessage}
                 onSelectSession={handleSelectAiAgentSession}
                 onSelectModel={aiSettings.selectAgentModel}
                 onSubmit={aiAgent.submit}
+                onSubmitEditedMessage={aiAgent.submitEditedMessage}
                 onToggleThinking={() => aiAgent.setThinkingEnabled((enabled) => !enabled)}
                 onToggleWebSearch={() => aiAgent.setWebSearchEnabled((enabled) => !enabled)}
               />

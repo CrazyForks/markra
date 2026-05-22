@@ -6,7 +6,21 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from "react";
-import { ArrowUp, Bot, BrainCircuit, ChevronDown, FileText, Globe2, PencilLine, Sparkles, X } from "lucide-react";
+import {
+  ArrowUp,
+  Bot,
+  BrainCircuit,
+  Check,
+  ChevronDown,
+  Copy,
+  FileText,
+  Globe2,
+  Pencil,
+  PencilLine,
+  RefreshCcw,
+  Sparkles,
+  X
+} from "lucide-react";
 import { AiModelPicker, getAiModelOptionValue, type AiModelPickerOption } from "./AiModelPicker";
 import { AiAgentSessionMenu } from "./AiAgentSessionMenu";
 import { AiMarkdownMessage } from "./AiMarkdownMessage";
@@ -61,9 +75,11 @@ type AiAgentPanelProps = {
   onResize?: (width: number) => unknown;
   onResizeEnd?: () => unknown;
   onResizeStart?: () => unknown;
+  onRetryMessage?: (messageId: number) => unknown;
   onSelectSession?: (sessionId: string) => unknown;
   onSelectModel?: (providerId: string, modelId: string) => unknown;
   onSubmit?: (promptOverride?: string) => unknown;
+  onSubmitEditedMessage?: (messageId: number, promptOverride: string) => unknown;
   onToggleThinking?: () => unknown;
   onToggleWebSearch?: () => unknown;
 };
@@ -104,16 +120,23 @@ export function AiAgentPanel({
   onResize,
   onResizeEnd,
   onResizeStart,
+  onRetryMessage,
   onSelectSession,
   onSelectModel,
   onSubmit,
+  onSubmitEditedMessage,
   onToggleThinking,
   onToggleWebSearch
 }: AiAgentPanelProps) {
   const resizeCleanupRef = useRef<(() => unknown) | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const copyResetTimerRef = useRef<number | null>(null);
+  const draftBeforeEditRef = useRef<string | null>(null);
   const transcriptShouldFollowRef = useRef(true);
   const [contextOpen, setContextOpen] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [collapsedThinkingMessageIds, setCollapsedThinkingMessageIds] = useState<Set<string>>(() =>
     collectCompletedThinkingMessageKeys(messages, status, activeSessionId)
   );
@@ -179,8 +202,27 @@ export function AiAgentPanel({
     return () => {
       resizeCleanupRef.current?.();
       resizeCleanupRef.current = null;
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+        copyResetTimerRef.current = null;
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (editingMessageId === null) return;
+    if (submitting) {
+      draftBeforeEditRef.current = null;
+      setEditingMessageId(null);
+      return;
+    }
+
+    const editedMessageExists = messages.some((message) => message.id === editingMessageId && message.role === "user");
+    if (!editedMessageExists) {
+      draftBeforeEditRef.current = null;
+      setEditingMessageId(null);
+    }
+  }, [editingMessageId, messages, submitting]);
 
   useEffect(() => {
     if (!open) return;
@@ -287,10 +329,24 @@ export function AiAgentPanel({
     }
   };
 
+  const submitComposer = () => {
+    if (!canSend) return;
+    const editedMessageId = editingMessageId;
+
+    draftBeforeEditRef.current = null;
+    setEditingMessageId(null);
+
+    if (editedMessageId !== null && onSubmitEditedMessage) {
+      onSubmitEditedMessage(editedMessageId, draft);
+      return;
+    }
+
+    onSubmit?.();
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSend) return;
-    onSubmit?.();
+    submitComposer();
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -298,15 +354,60 @@ export function AiAgentPanel({
     if (event.ctrlKey) return;
 
     event.preventDefault();
-    if (!canSend) return;
-    onSubmit?.();
+    submitComposer();
   };
 
   const handleSuggestion = (suggestion: string) => {
     if (!documentAvailable || submitting) return;
 
+    draftBeforeEditRef.current = null;
+    setEditingMessageId(null);
     onDraftChange?.(suggestion);
     onSubmit?.(suggestion);
+  };
+
+  const handleCopyMessage = (message: AiAgentPanelMessage) => {
+    if (!message.text.trim()) return;
+    const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+    if (!writeText) return;
+
+    writeText(message.text).then(() => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+
+      setCopiedMessageId(message.id);
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopiedMessageId((currentMessageId) => currentMessageId === message.id ? null : currentMessageId);
+        copyResetTimerRef.current = null;
+      }, 1600);
+    }).catch(() => {});
+  };
+
+  const handleEditMessage = (message: AiAgentPanelMessage) => {
+    if (!documentAvailable || submitting) return;
+
+    draftBeforeEditRef.current ??= draft;
+    setEditingMessageId(message.id);
+    onDraftChange?.(message.text);
+    window.requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
+  };
+
+  const handleCancelEditMessage = () => {
+    const restoredDraft = draftBeforeEditRef.current ?? "";
+    draftBeforeEditRef.current = null;
+    setEditingMessageId(null);
+    onDraftChange?.(restoredDraft);
+  };
+
+  const handleRetryMessage = (messageId: number) => {
+    if (!documentAvailable || submitting) return;
+
+    draftBeforeEditRef.current = null;
+    setEditingMessageId(null);
+    onRetryMessage?.(messageId);
   };
 
   const toggleThinkingMessage = (messageKey: string) => {
@@ -328,6 +429,50 @@ export function AiAgentPanel({
 
     transcriptShouldFollowRef.current =
       transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop <= 48;
+  };
+
+  const renderMessageActions = (message: AiAgentPanelMessage, align: "end" | "start") => {
+    const copied = copiedMessageId === message.id;
+    const editing = editingMessageId === message.id;
+
+    return (
+      <div className={`flex min-w-0 gap-0.5 ${align === "end" ? "justify-end" : "justify-start"}`}>
+        <IconButton
+          className={`rounded-md ${copied ? "text-(--accent)" : ""}`}
+          disabled={!message.text.trim()}
+          label={copied ? label("app.aiCopied") : label("app.aiAgentCopyMessage")}
+          size="icon-xs"
+          title={copied ? label("app.aiCopied") : label("app.aiAgentCopyMessage")}
+          onClick={() => handleCopyMessage(message)}
+        >
+          {copied ? <Check aria-hidden="true" size={13} /> : <Copy aria-hidden="true" size={13} />}
+        </IconButton>
+        {message.role === "user" ? (
+          <IconButton
+            className={`rounded-md ${editing ? "bg-(--bg-hover) text-(--accent)" : ""}`}
+            disabled={!documentAvailable || submitting}
+            label={editing ? label("app.aiAgentCancelEditMessage") : label("app.aiAgentEditMessage")}
+            pressed={editing}
+            size="icon-xs"
+            title={editing ? label("app.aiAgentCancelEditMessage") : label("app.aiAgentEditMessage")}
+            onClick={editing ? handleCancelEditMessage : () => handleEditMessage(message)}
+          >
+            {editing ? <X aria-hidden="true" size={13} /> : <Pencil aria-hidden="true" size={13} />}
+          </IconButton>
+        ) : (
+          <IconButton
+            className="rounded-md"
+            disabled={!documentAvailable || submitting}
+            label={label("app.aiAgentRetryMessage")}
+            size="icon-xs"
+            title={label("app.aiAgentRetryMessage")}
+            onClick={() => handleRetryMessage(message.id)}
+          >
+            <RefreshCcw aria-hidden="true" size={13} />
+          </IconButton>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -491,12 +636,18 @@ export function AiAgentPanel({
                 const thinkingMessageKey = createThinkingMessageKey(message.id, activeSessionId);
 
                 if (message.role === "user") {
+                  const editing = editingMessageId === message.id;
+
                   return (
-                    <li
-                      className="ml-auto min-w-0 max-w-[82%] rounded-lg bg-(--bg-active) px-3 py-2 text-[13px] leading-5 font-[560] text-(--text-heading)"
-                      key={message.id}
-                    >
-                      <AiMarkdownMessage content={message.text} />
+                    <li className="ml-auto grid min-w-0 max-w-[82%] justify-items-end gap-1" key={message.id}>
+                      <div
+                        className={`min-w-0 rounded-lg bg-(--bg-active) px-3 py-2 text-[13px] leading-5 font-[560] text-(--text-heading) ${
+                          editing ? "ring-2 ring-(--accent) ring-offset-1 ring-offset-(--bg-secondary)" : ""
+                        }`}
+                      >
+                        <AiMarkdownMessage content={message.text} />
+                      </div>
+                      {renderMessageActions(message, "end")}
                     </li>
                   );
                 }
@@ -517,41 +668,44 @@ export function AiAgentPanel({
                     <div className="grid gap-2">
                       {message.activities?.length ? <AiAgentProcessList activities={message.activities} translate={label} /> : null}
                       {message.text || thinkingSections.length > 0 || message.isError || showFallbackThinking || !message.activities?.length ? (
-                        <div className={assistantBubbleClassName}>
-                          {thinkingSections.length > 0 ? (
-                            <div className={message.text ? "mb-2 border-b border-(--border-default) pb-2" : ""}>
-                              <button
-                                className="mb-1 inline-flex h-6 max-w-full cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-0 text-[11px] leading-4 font-[560] text-(--text-tertiary) transition-colors duration-150 ease-out hover:text-(--text-heading) focus-visible:text-(--text-heading) focus-visible:outline-none"
-                                type="button"
-                                aria-expanded={!thinkingCollapsed}
-                                aria-label={label("app.aiAgentThinking")}
-                                onClick={() => toggleThinkingMessage(thinkingMessageKey)}
-                              >
-                                <ChevronDown
-                                  aria-hidden="true"
-                                  className={`shrink-0 transition-transform duration-150 ease-out ${thinkingCollapsed ? "-rotate-90" : ""}`}
-                                  size={13}
-                                />
-                                <span className="min-w-0 truncate">{label("app.aiAgentThinking")}</span>
-                              </button>
-                              {thinkingCollapsed ? null : (
-                                <div className="min-w-0 text-[12px] leading-5 text-(--text-secondary)">
-                                  {thinkingSections.map((section, index) => (
-                                    <div
-                                      className={index === 0 ? "" : "mt-2 border-t border-(--border-default) pt-2"}
-                                      key={`${message.id}:thinking:${index + 1}`}
-                                    >
-                                      <AiMarkdownMessage className="ai-chat-markdown-thinking" content={section} />
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : showFallbackThinking && !message.text ? (
-                            <p className="m-0 text-[12px] leading-5 text-(--text-secondary)">{label("app.aiAgentThinking")}</p>
-                          ) : null}
-                          <AiMarkdownMessage className={message.isError ? "ai-chat-markdown-danger" : ""} content={message.text} />
-                        </div>
+                        <>
+                          <div className={assistantBubbleClassName}>
+                            {thinkingSections.length > 0 ? (
+                              <div className={message.text ? "mb-2 border-b border-(--border-default) pb-2" : ""}>
+                                <button
+                                  className="mb-1 inline-flex h-6 max-w-full cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-0 text-[11px] leading-4 font-[560] text-(--text-tertiary) transition-colors duration-150 ease-out hover:text-(--text-heading) focus-visible:text-(--text-heading) focus-visible:outline-none"
+                                  type="button"
+                                  aria-expanded={!thinkingCollapsed}
+                                  aria-label={label("app.aiAgentThinking")}
+                                  onClick={() => toggleThinkingMessage(thinkingMessageKey)}
+                                >
+                                  <ChevronDown
+                                    aria-hidden="true"
+                                    className={`shrink-0 transition-transform duration-150 ease-out ${thinkingCollapsed ? "-rotate-90" : ""}`}
+                                    size={13}
+                                  />
+                                  <span className="min-w-0 truncate">{label("app.aiAgentThinking")}</span>
+                                </button>
+                                {thinkingCollapsed ? null : (
+                                  <div className="min-w-0 text-[12px] leading-5 text-(--text-secondary)">
+                                    {thinkingSections.map((section, index) => (
+                                      <div
+                                        className={index === 0 ? "" : "mt-2 border-t border-(--border-default) pt-2"}
+                                        key={`${message.id}:thinking:${index + 1}`}
+                                      >
+                                        <AiMarkdownMessage className="ai-chat-markdown-thinking" content={section} />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : showFallbackThinking && !message.text ? (
+                              <p className="m-0 text-[12px] leading-5 text-(--text-secondary)">{label("app.aiAgentThinking")}</p>
+                            ) : null}
+                            <AiMarkdownMessage className={message.isError ? "ai-chat-markdown-danger" : ""} content={message.text} />
+                          </div>
+                          {renderMessageActions(message, "start")}
+                        </>
                       ) : null}
                     </div>
                   </li>
@@ -572,6 +726,7 @@ export function AiAgentPanel({
             </label>
             <textarea
               id="markra-ai-agent-input"
+              ref={composerInputRef}
               className="max-h-32 min-h-14 w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-5 text-(--text-primary) outline-none placeholder:text-(--text-secondary)"
               value={draft}
               placeholder={composerPlaceholder}
