@@ -95,7 +95,7 @@ describe("NativeTitleBar", () => {
     expect(container.querySelector(".native-title-slot")).not.toHaveStyle({ transform: "translateX(110px)" });
   });
 
-  it("keeps macOS titlebar tabs between the sidebar and AI panel", () => {
+  it("keeps macOS titlebar tabs clear of transformed actions before the AI panel", () => {
     const { container } = render(
       <NativeTitleBar
         aiAgentOpen
@@ -120,7 +120,7 @@ describe("NativeTitleBar", () => {
 
     expect(container.querySelector(".native-title-slot")).toHaveStyle({
       marginLeft: "124px",
-      marginRight: "220px"
+      marginRight: "384px"
     });
   });
 

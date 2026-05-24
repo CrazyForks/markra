@@ -506,7 +506,7 @@ export function NativeTitleBar({
   const titleTransform = titleOffset === 0 ? undefined : `translateX(${titleOffset}px)`;
   const titleContentSlotStyle: CSSProperties = {
     ...(editorLeftInset > titlebarSideSlotWidth ? { marginLeft: editorLeftInset - titlebarSideSlotWidth } : {}),
-    ...(editorRightInset > titlebarSideSlotWidth ? { marginRight: editorRightInset - titlebarSideSlotWidth } : {})
+    ...(editorRightInset > 0 ? { marginRight: editorRightInset } : {})
   };
   const titleSlotStyle: CSSProperties = {
     transform: titleTransform,
