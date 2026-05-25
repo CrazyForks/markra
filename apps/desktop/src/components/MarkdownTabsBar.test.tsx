@@ -385,6 +385,45 @@ describe("MarkdownTabsBar", () => {
     expect(onOpenTabToSide).toHaveBeenCalledWith("tab-b");
   });
 
+  it("cancels a side-by-side tab group from the tab actions menu", () => {
+    const onCancelSideBySide = vi.fn();
+    const onCloseTab = vi.fn();
+
+    render(
+      <MarkdownTabsBar
+        activeTabId="tab-a"
+        items={[
+          [
+            {
+              dirty: false,
+              id: "tab-a",
+              name: "Alpha.md",
+              path: "/synthetic/alpha.md"
+            },
+            {
+              dirty: false,
+              id: "tab-b",
+              name: "Beta.md",
+              path: "/synthetic/beta.md"
+            }
+          ]
+        ]}
+        onCancelSideBySide={onCancelSideBySide}
+        onCloseTab={onCloseTab}
+        onNewTab={() => {}}
+        onOpenTabToSide={() => {}}
+        onSelectTab={() => {}}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /Beta\.md/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Cancel side-by-side" }));
+
+    expect(onCancelSideBySide).toHaveBeenCalledWith("tab-b");
+    expect(onCloseTab).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu", { name: "Beta.md" })).not.toBeInTheDocument();
+  });
+
   it("opens a pointer-dragged markdown tab to the side when released over the active tab", () => {
     const onOpenTabToSide = vi.fn();
 

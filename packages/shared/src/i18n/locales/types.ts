@@ -318,6 +318,7 @@ export type I18nKey =
   | "app.closeOtherDocumentTabs"
   | "app.closeDocumentTabsToRight"
   | "app.openDocumentToSide"
+  | "app.cancelSideBySideDocuments"
   | "app.newDocumentTab"
   | "app.toggleMarkdownFiles"
   | "app.aiAgent"

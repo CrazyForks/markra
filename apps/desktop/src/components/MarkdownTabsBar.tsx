@@ -23,6 +23,7 @@ type MarkdownTabsBarProps = {
   items: MarkdownTabsBarItem[];
   language?: AppLanguage;
   placement?: "editor" | "titlebar";
+  onCancelSideBySide?: (tabId: string) => unknown;
   onCloseTab: (tabId: string) => unknown;
   onNewTab: () => unknown;
   onOpenTabToSide?: (tabId: string, primaryTabId?: string) => unknown;
@@ -58,6 +59,7 @@ export function MarkdownTabsBar({
   items,
   language = "en",
   placement = "editor",
+  onCancelSideBySide,
   onCloseTab,
   onNewTab,
   onOpenTabToSide,
@@ -143,6 +145,9 @@ export function MarkdownTabsBar({
   const contextMenuRightTabIds = contextMenuTabItemIndex >= 0
     ? tabItemGroups.slice(contextMenuTabItemIndex + 1).flatMap((item) => item.map((tab) => tab.id))
     : [];
+  const contextMenuTabIsSideBySide = contextMenuTab
+    ? tabItemGroups.some((item) => item.length > 1 && item.some((tab) => tab.id === contextMenuTab.id))
+    : false;
   const tabCanParticipateInSideBySide = (tab: MarkdownTabsBarDocumentItem | null | undefined) =>
     Boolean(onOpenTabToSide) &&
     Boolean(tab?.path) &&
@@ -564,6 +569,18 @@ export function MarkdownTabsBar({
               >
                 <Columns2 aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
                 <span className="truncate">{label("app.openDocumentToSide")}</span>
+              </Button>
+            ) : null}
+            {onCancelSideBySide && contextMenuTabIsSideBySide ? (
+              <Button
+                className="w-full justify-start rounded-md text-left"
+                size="sm"
+                variant="ghost"
+                role="menuitem"
+                onClick={() => runTabContextMenuAction(() => onCancelSideBySide(contextMenuTab.id))}
+              >
+                <Columns2 aria-hidden="true" className="shrink-0 text-(--text-secondary)" size={14} />
+                <span className="truncate">{label("app.cancelSideBySideDocuments")}</span>
               </Button>
             ) : null}
             <Button

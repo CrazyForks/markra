@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "Fermer les autres onglets",
   "app.closeDocumentTabsToRight": "Fermer les onglets à droite",
   "app.openDocumentToSide": "Ouvrir sur le côté",
+  "app.cancelSideBySideDocuments": "Annuler le côte à côte",
   "app.newDocumentTab": "Nouvel onglet",
   "app.toggleMarkdownFiles": "Afficher ou masquer la liste des fichiers",
   "app.aiAgent": "Markra AI",

@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "Закрыть другие вкладки",
   "app.closeDocumentTabsToRight": "Закрыть вкладки справа",
   "app.openDocumentToSide": "Открыть сбоку",
+  "app.cancelSideBySideDocuments": "Отменить режим рядом",
   "app.newDocumentTab": "Новая вкладка",
   "app.toggleMarkdownFiles": "Показать или скрыть список файлов",
   "app.aiAgent": "Markra AI",

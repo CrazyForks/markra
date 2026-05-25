@@ -2363,6 +2363,12 @@ export default function App() {
     splitMode,
     updateActiveAiSelection
   ]);
+  const handleCancelTitlebarSideBySide = useCallback((tabId: string) => {
+    if (!sideDocumentGroup) return;
+    if (sideDocumentGroup.primaryTabId !== tabId && sideDocumentGroup.sideTabId !== tabId) return;
+
+    clearSideDocumentGroup();
+  }, [clearSideDocumentGroup, sideDocumentGroup]);
   const draggedMarkdownTabIdFromEvent = useCallback((event: ReactDragEvent<HTMLElement>) => {
     return event.dataTransfer.getData(markdownTabDragDataType);
   }, []);
@@ -2487,6 +2493,7 @@ export default function App() {
       items={titlebarItems}
       language={appLanguage.language}
       placement="titlebar"
+      onCancelSideBySide={handleCancelTitlebarSideBySide}
       onCloseTab={handleCloseTitlebarTab}
       onNewTab={() => {
         captureActiveDocumentViewState();

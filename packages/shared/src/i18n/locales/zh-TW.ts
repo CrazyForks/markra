@@ -175,6 +175,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "關閉其他標籤頁",
   "app.closeDocumentTabsToRight": "關閉右側標籤頁",
   "app.openDocumentToSide": "開啟到側邊",
+  "app.cancelSideBySideDocuments": "取消分屏",
   "app.newDocumentTab": "新增標籤頁",
   "app.toggleMarkdownFiles": "切換檔案列表",
   "app.aiAgent": "Markra AI",

@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "Chiudi altre schede",
   "app.closeDocumentTabsToRight": "Chiudi schede a destra",
   "app.openDocumentToSide": "Apri a lato",
+  "app.cancelSideBySideDocuments": "Annulla affiancamento",
   "app.newDocumentTab": "Nuova scheda",
   "app.toggleMarkdownFiles": "Mostra/nascondi elenco file",
   "app.aiAgent": "Markra AI",

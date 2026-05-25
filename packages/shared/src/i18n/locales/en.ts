@@ -307,6 +307,7 @@ const messages: BaseLocaleMessages = {
   "app.closeOtherDocumentTabs": "Close other tabs",
   "app.closeDocumentTabsToRight": "Close tabs to the right",
   "app.openDocumentToSide": "Open to side",
+  "app.cancelSideBySideDocuments": "Cancel side-by-side",
   "app.newDocumentTab": "New tab",
   "app.toggleMarkdownFiles": "Toggle file list",
   "app.aiAgent": "Markra AI",

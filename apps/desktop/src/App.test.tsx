@@ -2118,6 +2118,61 @@ describe("Markra workspace", () => {
     Reflect.deleteProperty(document, "elementFromPoint");
   });
 
+  it("cancels a side-by-side document group from the grouped tab menu", async () => {
+    const firstPath = "/mock-files/vault/docs/alpha.md";
+    const secondPath = "/mock-files/vault/docs/beta.md";
+    mockedOpenNativeMarkdownPath.mockResolvedValue({
+      kind: "folder",
+      folder: {
+        path: mockFolderPath,
+        name: "vault"
+      }
+    });
+    mockedListNativeMarkdownFilesForPath.mockResolvedValue([
+      { name: "alpha.md", path: firstPath, relativePath: "docs/alpha.md" },
+      { name: "beta.md", path: secondPath, relativePath: "docs/beta.md" }
+    ]);
+    mockedReadNativeMarkdownFile.mockImplementation(async (path) => {
+      if (path === firstPath) {
+        return {
+          content: "# Alpha\n\nMain",
+          name: "alpha.md",
+          path: firstPath
+        };
+      }
+
+      return {
+        content: "# Beta\n\nReference",
+        name: "beta.md",
+        path: secondPath
+      };
+    });
+    const { container } = renderApp();
+
+    fireEvent.keyDown(window, { key: "o", metaKey: true });
+    expect(await screen.findByRole("heading", { name: "vault" })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "docs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "docs/alpha.md" }));
+    expect(await screen.findByText("Alpha")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "docs/beta.md" }));
+    expect(await screen.findByText("Beta")).toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /alpha\.md/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open to side" }));
+    await waitFor(() => expect(container.querySelector(".editor-side-by-side-surface")).toBeInTheDocument());
+    expect(container.querySelector(".document-tabs-side-by-side-group")).toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /alpha\.md/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Cancel side-by-side" }));
+
+    await waitFor(() => expect(container.querySelector(".editor-side-by-side-surface")).not.toBeInTheDocument());
+    expect(container.querySelector(".document-tabs-side-by-side-group")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /alpha\.md/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /beta\.md/ })).toBeInTheDocument();
+  });
+
   it("keeps a side-by-side tab group while selecting a standalone clean tab", async () => {
     const firstPath = "/mock-files/vault/docs/1.md";
     const secondPath = "/mock-files/vault/docs/2.md";

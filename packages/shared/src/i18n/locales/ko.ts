@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "다른 탭 닫기",
   "app.closeDocumentTabsToRight": "오른쪽 탭 닫기",
   "app.openDocumentToSide": "옆에 열기",
+  "app.cancelSideBySideDocuments": "나란히 보기 취소",
   "app.newDocumentTab": "새 탭",
   "app.toggleMarkdownFiles": "파일 목록 전환",
   "app.aiAgent": "Markra AI",

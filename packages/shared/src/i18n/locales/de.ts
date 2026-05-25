@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "Andere Tabs schließen",
   "app.closeDocumentTabsToRight": "Tabs rechts schließen",
   "app.openDocumentToSide": "Seitlich öffnen",
+  "app.cancelSideBySideDocuments": "Nebeneinander beenden",
   "app.newDocumentTab": "Neuer Tab",
   "app.toggleMarkdownFiles": "Dateiliste umschalten",
   "app.aiAgent": "Markra AI",

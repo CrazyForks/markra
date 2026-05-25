@@ -167,6 +167,7 @@ const messages: LocaleMessages = {
   "app.closeOtherDocumentTabs": "Cerrar otras pestañas",
   "app.closeDocumentTabsToRight": "Cerrar pestañas a la derecha",
   "app.openDocumentToSide": "Abrir al lado",
+  "app.cancelSideBySideDocuments": "Cancelar vista lado a lado",
   "app.newDocumentTab": "Nueva pestaña",
   "app.toggleMarkdownFiles": "Alternar lista de archivos",
   "app.aiAgent": "Markra AI",
