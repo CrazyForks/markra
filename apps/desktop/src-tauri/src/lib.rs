@@ -24,10 +24,11 @@ use markdown_files::{
     write_markdown_template_file,
 };
 use menu::{
-    create_application_menu, emit_native_menu_command, install_application_menu,
-    is_frontend_menu_command, is_native_new_window_command, is_native_settings_window_command,
+    apply_native_application_menu_for_window_event, create_application_menu,
+    emit_native_menu_command, install_application_menu, is_frontend_menu_command,
+    is_native_new_window_command, is_native_settings_window_command,
     remember_native_menu_webview_window, remember_native_menu_window_from_event,
-    NativeMenuTargetState,
+    NativeApplicationMenuState, NativeMenuTargetState,
 };
 use opened_files::{
     opened_markdown_paths_from_args, opened_markdown_paths_from_urls, queue_opened_markdown_paths,
@@ -55,6 +56,7 @@ pub fn run() {
         .manage(MarkdownFileWatcherState::default())
         .manage(MarkdownTreeWatcherState::default())
         .manage(OpenedMarkdownPathsState::default())
+        .manage(NativeApplicationMenuState::default())
         .manage(NativeMenuTargetState::default())
         .manage(EditorWindowRestoreState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -76,6 +78,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             remember_native_menu_window_from_event(window, event);
+            apply_native_application_menu_for_window_event(window, event);
             apply_window_event_chrome(window, event);
             remove_editor_window_restore_state(window, event);
         })

@@ -53,6 +53,32 @@ fn is_blank_editor_window_label(label: &str) -> bool {
     label.starts_with(BLANK_EDITOR_WINDOW_LABEL_PREFIX)
 }
 
+pub(crate) fn is_settings_window_label(label: &str) -> bool {
+    label == SETTINGS_WINDOW_LABEL
+}
+
+fn should_hide_native_menu_for_window_label(label: &str) -> bool {
+    is_settings_window_label(label)
+}
+
+pub(crate) fn hide_native_menu_for_settings_window<R>(window: &tauri::WebviewWindow<R>)
+where
+    R: tauri::Runtime,
+{
+    if should_hide_native_menu_for_window_label(window.label()) {
+        let _ = window.hide_menu();
+    }
+}
+
+pub(crate) fn hide_native_menu_for_settings_window_in_app<R>(app: &tauri::AppHandle<R>)
+where
+    R: tauri::Runtime,
+{
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        hide_native_menu_for_settings_window(&window);
+    }
+}
+
 fn encode_url_query_component(value: &str) -> String {
     let mut encoded = String::new();
 
@@ -213,6 +239,14 @@ fn settings_window_url(target: Option<&str>) -> String {
     SETTINGS_WINDOW_URL.to_string()
 }
 
+#[cfg(not(target_os = "macos"))]
+fn create_settings_window_menu<R>(app: &tauri::AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>>
+where
+    R: tauri::Runtime,
+{
+    tauri::menu::MenuBuilder::new(app).build()
+}
+
 pub(crate) fn spawn_editor_window<R>(app: tauri::AppHandle<R>, url: String)
 where
     R: tauri::Runtime,
@@ -319,6 +353,7 @@ where
     std::thread::spawn(move || {
         if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
             let _ = window.show();
+            hide_native_menu_for_settings_window(&window);
             let _ = window.set_focus();
             if let Some(target) = target.clone() {
                 let _ = window.emit(
@@ -346,6 +381,15 @@ where
         .shadow(settings_window_shadow())
         .center();
 
+        #[cfg(not(target_os = "macos"))]
+        let builder = match create_settings_window_menu(&app) {
+            Ok(menu) => builder.menu(menu),
+            Err(error) => {
+                eprintln!("failed to create settings window menu: {error}");
+                builder
+            }
+        };
+
         let builder = if let Some(color) = settings_window_background_color() {
             builder.background_color(color)
         } else {
@@ -360,6 +404,7 @@ where
         match builder.build() {
             Ok(window) => {
                 hide_native_macos_window_controls(&window);
+                hide_native_menu_for_settings_window(&window);
             }
             Err(error) => {
                 eprintln!("failed to create settings window: {error}");
@@ -499,6 +544,15 @@ mod tests {
         assert_eq!(settings_window_inner_size(), (1040.0, 720.0));
         assert_eq!(settings_window_min_inner_size(), (860.0, 600.0));
         assert!(settings_window_resizable());
+    }
+
+    #[test]
+    fn settings_window_is_the_only_window_label_that_hides_native_menu() {
+        assert!(should_hide_native_menu_for_window_label(
+            SETTINGS_WINDOW_LABEL
+        ));
+        assert!(!should_hide_native_menu_for_window_label(MAIN_WINDOW_LABEL));
+        assert!(!should_hide_native_menu_for_window_label("markra-editor-1"));
     }
 
     #[test]

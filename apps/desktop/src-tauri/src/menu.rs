@@ -2,7 +2,7 @@ use crate::language::{resolve_startup_language, AppLanguage};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{
-    menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+    menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, Submenu, SubmenuBuilder},
     Emitter, Manager,
 };
 
@@ -16,6 +16,75 @@ const MARKRA_GITHUB_URL: &str = "https://github.com/murongg/markra";
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct NativeMenuCommand {
     pub(crate) command: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativeApplicationMenuProfile {
+    Editor,
+    Settings,
+}
+
+#[derive(Clone, Default)]
+struct NativeApplicationMenuConfig {
+    accelerators: Option<HashMap<String, String>>,
+    language: Option<AppLanguage>,
+}
+
+#[derive(Default)]
+pub(crate) struct NativeApplicationMenuState(Mutex<NativeApplicationMenuConfig>);
+
+impl NativeApplicationMenuState {
+    fn remember(&self, language: AppLanguage, accelerators: Option<HashMap<String, String>>) {
+        let mut config = self
+            .0
+            .lock()
+            .expect("native application menu config lock poisoned");
+        *config = NativeApplicationMenuConfig {
+            accelerators,
+            language: Some(language),
+        };
+    }
+
+    fn config(&self, identifier: &str) -> (AppLanguage, Option<HashMap<String, String>>) {
+        let config = self
+            .0
+            .lock()
+            .expect("native application menu config lock poisoned")
+            .clone();
+
+        (
+            config
+                .language
+                .unwrap_or_else(|| resolve_startup_language(identifier)),
+            config.accelerators,
+        )
+    }
+}
+
+fn native_application_menu_profile_for_window_label(label: &str) -> NativeApplicationMenuProfile {
+    if crate::windows::is_settings_window_label(label) {
+        return NativeApplicationMenuProfile::Settings;
+    }
+
+    NativeApplicationMenuProfile::Editor
+}
+
+#[cfg(test)]
+fn native_application_menu_profile_submenu_ids(
+    profile: NativeApplicationMenuProfile,
+) -> Vec<String> {
+    let ids: &[&str] = match profile {
+        NativeApplicationMenuProfile::Editor => &[
+            "markra:app",
+            "markra:file",
+            "markra:edit",
+            "markra:format",
+            "markra:view",
+        ],
+        NativeApplicationMenuProfile::Settings => &["markra:app", "markra:edit"],
+    };
+
+    ids.iter().copied().map(String::from).collect()
 }
 
 #[derive(Default)]
@@ -108,11 +177,121 @@ fn application_about_metadata() -> AboutMetadata<'static> {
     }
 }
 
+fn create_markra_app_submenu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    labels: crate::menu_labels::MenuLabels,
+) -> tauri::Result<Submenu<R>> {
+    let settings = app_menu_item(app, SETTINGS_WINDOW_COMMAND, labels.settings, "CmdOrCtrl+,")?;
+    let check_updates =
+        app_menu_item_without_accelerator(app, CHECK_FOR_UPDATES_COMMAND, labels.check_updates)?;
+
+    SubmenuBuilder::with_id(app, "markra:app", "Markra")
+        .about(Some(application_about_metadata()))
+        .separator()
+        .items(&[&settings, &check_updates])
+        .separator()
+        .hide_with_text(labels.hide)
+        .hide_others_with_text(labels.hide_others)
+        .show_all_with_text(labels.show_all)
+        .separator()
+        .quit_with_text(labels.quit)
+        .build()
+}
+
+fn create_edit_submenu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    labels: crate::menu_labels::MenuLabels,
+) -> tauri::Result<Submenu<R>> {
+    SubmenuBuilder::with_id(app, "markra:edit", labels.edit)
+        .undo_with_text(labels.undo)
+        .redo_with_text(labels.redo)
+        .separator()
+        .cut_with_text(labels.cut)
+        .copy_with_text(labels.copy)
+        .paste_with_text(labels.paste)
+        .select_all_with_text(labels.select_all)
+        .build()
+}
+
 pub(crate) fn create_application_menu<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> tauri::Result<Menu<R>> {
     let language = resolve_startup_language(&app.config().identifier);
     create_application_menu_for_language(app, language, None)
+}
+
+fn create_settings_menu_for_language<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    language: AppLanguage,
+) -> tauri::Result<Menu<R>> {
+    let labels = crate::menu_labels::for_language(language);
+    let app_menu = create_markra_app_submenu(app, labels)?;
+    let edit_menu = create_edit_submenu(app, labels)?;
+
+    MenuBuilder::new(app)
+        .items(&[&app_menu, &edit_menu])
+        .build()
+}
+
+fn create_application_menu_for_profile<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    profile: NativeApplicationMenuProfile,
+    language: AppLanguage,
+    accelerators: Option<&HashMap<String, String>>,
+) -> tauri::Result<Menu<R>> {
+    match profile {
+        NativeApplicationMenuProfile::Editor => {
+            create_application_menu_for_language(app, language, accelerators)
+        }
+        NativeApplicationMenuProfile::Settings => create_settings_menu_for_language(app, language),
+    }
+}
+
+fn current_native_application_menu_profile<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> NativeApplicationMenuProfile {
+    app.state::<NativeMenuTargetState>()
+        .label()
+        .as_deref()
+        .map(native_application_menu_profile_for_window_label)
+        .unwrap_or(NativeApplicationMenuProfile::Editor)
+}
+
+pub(crate) fn apply_native_application_menu_for_window_event<R: tauri::Runtime>(
+    window: &tauri::Window<R>,
+    event: &tauri::WindowEvent,
+) {
+    if !matches!(event, tauri::WindowEvent::Focused(true)) {
+        return;
+    }
+
+    apply_native_application_menu_for_window_label(&window.app_handle(), window.label());
+}
+
+fn apply_native_application_menu_for_window_label<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        let profile = native_application_menu_profile_for_window_label(label);
+        let (language, accelerators) = app
+            .state::<NativeApplicationMenuState>()
+            .config(&app.config().identifier);
+        match create_application_menu_for_profile(app, profile, language, accelerators.as_ref()) {
+            Ok(menu) => {
+                let _ = app.set_menu(menu);
+            }
+            Err(error) => {
+                eprintln!("failed to apply native application menu: {error}");
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, label);
+    }
 }
 
 fn create_application_menu_for_language<R: tauri::Runtime>(
@@ -152,9 +331,6 @@ fn create_application_menu_for_language<R: tauri::Runtime>(
             &export_latex,
         ])
         .build()?;
-    let settings = app_menu_item(app, SETTINGS_WINDOW_COMMAND, labels.settings, "CmdOrCtrl+,")?;
-    let check_updates =
-        app_menu_item_without_accelerator(app, CHECK_FOR_UPDATES_COMMAND, labels.check_updates)?;
 
     let bold = app_menu_item(
         app,
@@ -277,17 +453,7 @@ fn create_application_menu_for_language<R: tauri::Runtime>(
         &menu_accelerator(accelerators, "toggleSourceMode", "CmdOrCtrl+Alt+S"),
     )?;
 
-    let app_menu = SubmenuBuilder::with_id(app, "markra:app", "Markra")
-        .about(Some(application_about_metadata()))
-        .separator()
-        .items(&[&settings, &check_updates])
-        .separator()
-        .hide_with_text(labels.hide)
-        .hide_others_with_text(labels.hide_others)
-        .show_all_with_text(labels.show_all)
-        .separator()
-        .quit_with_text(labels.quit)
-        .build()?;
+    let app_menu = create_markra_app_submenu(app, labels)?;
 
     let file_menu = SubmenuBuilder::with_id(app, "markra:file", labels.file)
         .items(&[&new, &open, &open_folder, &close])
@@ -297,15 +463,7 @@ fn create_application_menu_for_language<R: tauri::Runtime>(
         .items(&[&export_menu])
         .build()?;
 
-    let edit_menu = SubmenuBuilder::with_id(app, "markra:edit", labels.edit)
-        .undo_with_text(labels.undo)
-        .redo_with_text(labels.redo)
-        .separator()
-        .cut_with_text(labels.cut)
-        .copy_with_text(labels.copy)
-        .paste_with_text(labels.paste)
-        .select_all_with_text(labels.select_all)
-        .build()?;
+    let edit_menu = create_edit_submenu(app, labels)?;
 
     let format_menu = SubmenuBuilder::with_id(app, "markra:format", labels.format)
         .items(&[&bold, &italic, &strikethrough, &inline_code])
@@ -354,11 +512,21 @@ pub(crate) fn install_application_menu(
 ) -> Result<(), String> {
     let language = AppLanguage::from_code(&language)
         .ok_or_else(|| format!("Unsupported application menu language: {language}"))?;
-    let menu = create_application_menu_for_language(&app, language, accelerators.as_ref())
+    app.state::<NativeApplicationMenuState>()
+        .remember(language, accelerators.clone());
+
+    #[cfg(target_os = "macos")]
+    let profile = current_native_application_menu_profile(&app);
+    #[cfg(not(target_os = "macos"))]
+    let profile = NativeApplicationMenuProfile::Editor;
+
+    let menu = create_application_menu_for_profile(&app, profile, language, accelerators.as_ref())
         .map_err(|error| error.to_string())?;
 
     app.set_menu(menu)
-        .map(|_| ())
+        .map(|_| {
+            crate::windows::hide_native_menu_for_settings_window_in_app(&app);
+        })
         .map_err(|error| error.to_string())
 }
 
@@ -486,5 +654,32 @@ mod tests {
         state.remember("markra-editor-1");
 
         assert_eq!(state.label().as_deref(), Some("markra-editor-1"));
+    }
+
+    #[test]
+    fn focused_settings_window_uses_settings_menu_profile() {
+        assert_eq!(
+            native_application_menu_profile_for_window_label("markra-settings"),
+            NativeApplicationMenuProfile::Settings
+        );
+        assert_eq!(
+            native_application_menu_profile_for_window_label("main"),
+            NativeApplicationMenuProfile::Editor
+        );
+        assert_eq!(
+            native_application_menu_profile_for_window_label("markra-editor-1"),
+            NativeApplicationMenuProfile::Editor
+        );
+    }
+
+    #[test]
+    fn settings_application_menu_omits_editor_only_submenus() {
+        let submenu_ids =
+            native_application_menu_profile_submenu_ids(NativeApplicationMenuProfile::Settings);
+
+        assert_eq!(submenu_ids, vec!["markra:app", "markra:edit"]);
+        assert!(!submenu_ids.contains(&"markra:file".to_string()));
+        assert!(!submenu_ids.contains(&"markra:format".to_string()));
+        assert!(!submenu_ids.contains(&"markra:view".to_string()));
     }
 }
