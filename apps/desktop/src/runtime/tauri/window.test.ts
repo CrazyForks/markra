@@ -1,8 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { exit } from "@tauri-apps/plugin-process";
 import {
   closeNativeWindow,
+  exitNativeApp,
+  listenNativeAppExitRequested,
+  listenNativeWindowCloseRequested,
   listenNativeSettingsWindowTarget,
   listNativeEditorWindowRestoreStates,
   minimizeNativeWindow,
@@ -23,9 +27,14 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn()
 }));
 
+vi.mock("@tauri-apps/plugin-process", () => ({
+  exit: vi.fn()
+}));
+
 const mockedGetCurrentWindow = vi.mocked(getCurrentWindow);
 const mockedInvoke = vi.mocked(invoke);
 const mockedListen = vi.mocked(listen);
+const mockedExit = vi.mocked(exit);
 
 describe("native window actions", () => {
   beforeEach(() => {
@@ -36,6 +45,7 @@ describe("native window actions", () => {
     mockedGetCurrentWindow.mockReset();
     mockedInvoke.mockReset();
     mockedListen.mockReset();
+    mockedExit.mockReset();
   });
 
   afterEach(() => {
@@ -49,6 +59,49 @@ describe("native window actions", () => {
     await closeNativeWindow();
 
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("listens for native window close requests", async () => {
+    const cleanup = vi.fn();
+    const onCloseRequested = vi.fn();
+    const onCloseRequestedNative = vi.fn().mockResolvedValue(cleanup);
+    mockedGetCurrentWindow.mockReturnValue({
+      onCloseRequested: onCloseRequestedNative
+    } as unknown as ReturnType<typeof getCurrentWindow>);
+
+    await expect(listenNativeWindowCloseRequested(onCloseRequested)).resolves.toBe(cleanup);
+    const nativeHandler = onCloseRequestedNative.mock.calls[0]?.[0] as ((event: { preventDefault: () => unknown }) => unknown) | undefined;
+    if (!nativeHandler) throw new Error("close request listener was not registered");
+    const preventDefault = vi.fn();
+    await nativeHandler({ preventDefault });
+
+    expect(onCloseRequestedNative).toHaveBeenCalledWith(expect.any(Function));
+    expect(onCloseRequested).toHaveBeenCalledWith({ preventDefault: expect.any(Function) });
+    const closeRequestEvent = onCloseRequested.mock.calls[0]?.[0] as { preventDefault: () => unknown } | undefined;
+    closeRequestEvent?.preventDefault();
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("listens for native app exit requests", async () => {
+    const cleanup = vi.fn();
+    mockedListen.mockImplementation((_event, callback) => Promise.resolve(cleanup));
+    const onExitRequested = vi.fn();
+
+    await expect(listenNativeAppExitRequested(onExitRequested)).resolves.toBe(cleanup);
+    const onEvent = mockedListen.mock.calls[0]?.[1] as (() => unknown) | undefined;
+    if (!onEvent) throw new Error("app exit request listener was not registered");
+    onEvent();
+
+    expect(mockedListen).toHaveBeenCalledWith("markra://app-exit-requested", expect.any(Function));
+    expect(onExitRequested).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms and exits the native app", async () => {
+    mockedExit.mockResolvedValue(undefined);
+
+    await exitNativeApp();
+
+    expect(mockedExit).toHaveBeenCalledWith(0);
   });
 
   it("minimizes the current Tauri window", async () => {

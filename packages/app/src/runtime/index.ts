@@ -45,6 +45,7 @@ import type {
 import type {
   NativeEditorWindowRestoreState,
   NativeSettingsWindowTarget,
+  NativeWindowCloseRequestEvent,
   SetNativeEditorWindowRestoreStateInput
 } from "../lib/tauri/window";
 import type { NativePandocSetupAction } from "../lib/tauri/dialog";
@@ -227,8 +228,13 @@ export type AppFeatureRuntime = {
 
 export type AppWindowRuntime = {
   closeWindow: () => Promise<unknown>;
+  exitApp: () => Promise<unknown>;
   listEditorWindowRestoreStates: () => Promise<NativeEditorWindowRestoreState[]>;
+  listenAppExitRequested: (onExitRequested: () => unknown | Promise<unknown>) => Promise<RuntimeCleanup>;
   listenSettingsWindowTarget: (onTarget: (target: NativeSettingsWindowTarget) => unknown) => Promise<RuntimeCleanup>;
+  listenWindowCloseRequested: (
+    onCloseRequested: (event: NativeWindowCloseRequestEvent) => unknown | Promise<unknown>
+  ) => Promise<RuntimeCleanup>;
   minimizeWindow: () => Promise<unknown>;
   openExternalUrl: (url: string) => Promise<unknown>;
   openSettingsWindow: (target?: NativeSettingsWindowTarget) => Promise<unknown>;
@@ -367,8 +373,11 @@ export function createDefaultAppRuntime(): AppRuntime {
     },
     window: {
       closeWindow: async () => undefined,
+      exitApp: async () => undefined,
       listEditorWindowRestoreStates: async () => [],
+      listenAppExitRequested: async () => () => undefined,
       listenSettingsWindowTarget: async () => () => undefined,
+      listenWindowCloseRequested: async () => () => undefined,
       minimizeWindow: async () => undefined,
       openExternalUrl: async (url) => {
         if (typeof window !== "undefined") {
