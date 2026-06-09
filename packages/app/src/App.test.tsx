@@ -4144,6 +4144,66 @@ describe("Markra workspace", () => {
     expect(visualScroll!.scrollTop).toBe(100);
   });
 
+  it("keeps scroll progress when an opened file switches from visual to source mode", async () => {
+    mockedOpenNativeMarkdownPath.mockResolvedValue({
+      kind: "file",
+      file: {
+        content: `# External file\r\n\r\n${"Paragraph\r\n\r\n".repeat(80)}`,
+        name: "external.md",
+        path: "/mock-files/external.md"
+      }
+    });
+    renderApp();
+
+    fireEvent.keyDown(window, { key: "o", metaKey: true });
+    expect(await screen.findByText("External file")).toBeInTheDocument();
+    await settleEditorUpdates();
+
+    const visualScroll = screen.getByLabelText("Writing surface");
+    mockScrollMetrics(visualScroll, {
+      clientHeight: 200,
+      scrollHeight: 1000,
+      scrollTop: 400
+    });
+    fireEvent.scroll(visualScroll);
+
+    let restoreFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      restoreFrame = callback;
+      return 1;
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to source mode" }));
+    const sourceScroll = screen.getByLabelText("Markdown source").closest(".paper-scroll")!;
+    mockScrollMetrics(sourceScroll, {
+      clientHeight: 200,
+      scrollHeight: 1200,
+      scrollTop: 0
+    });
+
+    act(() => {
+      restoreFrame?.(0);
+    });
+
+    expect(sourceScroll.scrollTop).toBe(500);
+
+    fireEvent.scroll(sourceScroll);
+    fireEvent.click(screen.getByRole("button", { name: "Switch to visual mode" }));
+    const restoredVisualScroll = screen.getByLabelText("Writing surface");
+    mockScrollMetrics(restoredVisualScroll, {
+      clientHeight: 200,
+      scrollHeight: 1000,
+      scrollTop: 0
+    });
+
+    act(() => {
+      restoreFrame?.(0);
+    });
+
+    expect(restoredVisualScroll.scrollTop).toBe(400);
+    requestAnimationFrameSpy.mockRestore();
+  });
+
   it("switches source mode from the keyboard shortcut", async () => {
     renderApp();
 

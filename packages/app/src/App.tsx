@@ -222,6 +222,11 @@ type DocumentTabViewState = {
   sourceScrollTop?: number;
   visualScrollTop?: number;
 };
+type PendingEditorModeScroll = {
+  progress: number;
+  tabId: string;
+  targetSurface: EditorSurface;
+};
 
 function isSettingsWindowRoute() {
   return new URLSearchParams(window.location.search).has("settings");
@@ -435,6 +440,7 @@ function WorkspaceApp() {
   const sourceScrollRef = useRef<HTMLElement | null>(null);
   const visualScrollRef = useRef<HTMLElement | null>(null);
   const documentTabViewStatesRef = useRef(new Map<string, DocumentTabViewState>());
+  const pendingEditorModeScrollRef = useRef<PendingEditorModeScroll | null>(null);
   const splitSurfaceRef = useRef<HTMLDivElement | null>(null);
   const sideDocumentSurfaceRef = useRef<HTMLDivElement | null>(null);
   const splitScrollSyncTargetRef = useRef<EditorSurface | null>(null);
@@ -941,6 +947,19 @@ function WorkspaceApp() {
     if (sourceScrollRef.current) nextState.sourceScrollTop = sourceScrollRef.current.scrollTop;
     if (Object.keys(nextState).length > 0) saveDocumentTabViewState(activeTabId, nextState);
   }, [activeImageFile, activeTabId, saveDocumentTabViewState]);
+  const queueEditorModeScroll = useCallback((targetSurface: EditorSurface) => {
+    if (!activeTabId) return;
+
+    const sourceElement = targetSurface === "source" ? visualScrollRef.current : sourceScrollRef.current;
+    if (!sourceElement) return;
+
+    const maxScrollTop = Math.max(0, sourceElement.scrollHeight - sourceElement.clientHeight);
+    pendingEditorModeScrollRef.current = {
+      progress: maxScrollTop <= 0 ? 0 : Math.min(1, Math.max(0, sourceElement.scrollTop / maxScrollTop)),
+      tabId: activeTabId,
+      targetSurface
+    };
+  }, [activeTabId]);
   const handleOpenEditorLink = useCallback(async (href: string) => {
     const linkedFile = resolveMarkdownDocumentLinkFile(href, document.path, fileTreeFiles);
     if (linkedFile) {
@@ -2776,6 +2795,7 @@ function WorkspaceApp() {
     captureActiveDocumentViewState();
 
     if (sourceMode) {
+      queueEditorModeScroll("visual");
       setEditorMode("visual");
       setActiveEditorSurface("visual");
       return;
@@ -2783,11 +2803,13 @@ function WorkspaceApp() {
 
     updateActiveAiSelection(null);
     handleAiCommandClose();
+    queueEditorModeScroll("source");
     setEditorMode("source");
     setActiveEditorSurface("source");
   }, [
     captureActiveDocumentViewState,
     handleAiCommandClose,
+    queueEditorModeScroll,
     sourceMode,
     sourceModeAvailable,
     updateActiveAiSelection
@@ -2963,18 +2985,44 @@ function WorkspaceApp() {
     const viewState = documentTabViewStatesRef.current.get(activeTabId);
     const restoreFrame = window.requestAnimationFrame(() => {
       if ((editorMode === "visual" || editorMode === "split") && visualScrollRef.current) {
-        restoreElementScrollTop(visualScrollRef.current, viewState?.visualScrollTop ?? 0);
+        const pendingScroll = pendingEditorModeScrollRef.current;
+        const visualScrollTop = pendingScroll?.tabId === activeTabId && pendingScroll.targetSurface === "visual"
+          ? pendingScroll.progress * Math.max(0, visualScrollRef.current.scrollHeight - visualScrollRef.current.clientHeight)
+          : viewState?.visualScrollTop ?? 0;
+        restoreElementScrollTop(visualScrollRef.current, visualScrollTop);
+        saveDocumentTabViewState(activeTabId, { visualScrollTop });
       }
 
       if ((editorMode === "source" || editorMode === "split") && sourceScrollRef.current) {
-        restoreElementScrollTop(sourceScrollRef.current, viewState?.sourceScrollTop ?? 0);
+        const pendingScroll = pendingEditorModeScrollRef.current;
+        const sourceScrollTop = pendingScroll?.tabId === activeTabId && pendingScroll.targetSurface === "source"
+          ? pendingScroll.progress * Math.max(0, sourceScrollRef.current.scrollHeight - sourceScrollRef.current.clientHeight)
+          : viewState?.sourceScrollTop ?? 0;
+        restoreElementScrollTop(sourceScrollRef.current, sourceScrollTop);
+        saveDocumentTabViewState(activeTabId, { sourceScrollTop });
+      }
+
+      const pendingScroll = pendingEditorModeScrollRef.current;
+      if (pendingScroll?.tabId === activeTabId && (
+        pendingScroll.targetSurface === editorMode
+        || editorMode === "split"
+      )) {
+        pendingEditorModeScrollRef.current = null;
       }
     });
 
     return () => {
       window.cancelAnimationFrame(restoreFrame);
     };
-  }, [activeImageFile, activeTabId, document.revision, editorMode, hasOpenDocument, visualEditorReadySequence]);
+  }, [
+    activeImageFile,
+    activeTabId,
+    document.revision,
+    editorMode,
+    hasOpenDocument,
+    saveDocumentTabViewState,
+    visualEditorReadySequence
+  ]);
   useEffect(() => {
     if (!splitMode || activeEditorSurface !== "source") return;
 
