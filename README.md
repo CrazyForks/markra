@@ -23,6 +23,9 @@
 </p>
 
 <p align="center">
+  <a href="https://www.buymeacoffee.com/murong" target="_blank" rel="noopener noreferrer">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="195" height="54" />
+  </a>
   <a href="https://www.producthunt.com/products/markra">
     <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=markra&theme=light" width="250" height="54" alt="Find Markra on Product Hunt" />
   </a>
