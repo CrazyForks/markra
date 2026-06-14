@@ -155,6 +155,40 @@ function replaceMarkdownSource(sourceEditor: HTMLElement, value: string) {
   });
 }
 
+function queryVisibleMilkdownEditor(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>('[data-editor-engine="milkdown"]')).find(
+    (element) => !element.closest("[hidden]")
+  ) ?? null;
+}
+
+function getVisibleMilkdownEditor(container: HTMLElement) {
+  const editor = queryVisibleMilkdownEditor(container);
+  if (!editor) {
+    throw new Error("Expected a visible Milkdown editor.");
+  }
+
+  return editor;
+}
+
+function getVisibleWritingSurface(container: HTMLElement) {
+  const surface = Array.from(container.querySelectorAll<HTMLElement>('[aria-label="Writing surface"]')).find(
+    (element) => !element.closest("[hidden]")
+  );
+  if (!surface) {
+    throw new Error("Expected a visible writing surface.");
+  }
+
+  return surface;
+}
+
+function queryVisibleMilkdownTable(container: HTMLElement) {
+  return getVisibleMilkdownEditor(container).querySelector("table");
+}
+
+async function expectVisibleMilkdownText(container: HTMLElement, text: string) {
+  await waitFor(() => expect(within(getVisibleMilkdownEditor(container)).getByText(text)).toBeInTheDocument());
+}
+
 function createStoredEditorPreferences(
   overrides: Partial<Parameters<typeof mockedSaveStoredEditorPreferences>[0]> = {}
 ): Parameters<typeof mockedSaveStoredEditorPreferences>[0] {
@@ -1679,7 +1713,10 @@ describe("Markra workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to source mode" }));
 
-    const sourceEditor = await screen.findByLabelText("Markdown editor");
+    const sourceEditor = (await screen.findByTestId("markdown-source-editor")).closest<HTMLElement>(
+      '[data-editor-engine="source"]'
+    );
+    expect(sourceEditor).toBeInTheDocument();
     expect(sourceEditor).toHaveAttribute("data-editor-engine", "source");
     expect(sourceEditor).toHaveStyle({
       maxWidth: "980px"
@@ -2145,7 +2182,7 @@ describe("Markra workspace", () => {
       path: guidePath
     });
 
-    renderApp();
+    const { container } = renderApp();
 
     fireEvent.keyDown(window, { key: "o", metaKey: true });
     expect(await screen.findByText("Native file")).toBeInTheDocument();
@@ -2160,25 +2197,25 @@ describe("Markra workspace", () => {
     expect(screen.getByRole("tab", { name: /native\.md/ })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tab", { name: /pasted-image\.png/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("heading", { name: "pasted-image.png" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Markdown editor")).not.toBeInTheDocument();
+    expect(queryVisibleMilkdownEditor(container)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Markdown" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("tab", { name: /native\.md/ }));
 
     expect(await screen.findByText("Native file")).toBeInTheDocument();
-    expect(screen.getByLabelText("Markdown editor")).toBeInTheDocument();
+    expect(getVisibleMilkdownEditor(container)).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "pasted-image.png" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /pasted-image\.png/ }));
 
     expect(await screen.findByRole("img", { name: "pasted-image.png" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Markdown editor")).not.toBeInTheDocument();
+    expect(queryVisibleMilkdownEditor(container)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
 
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
-    expect(screen.getByLabelText("Markdown editor")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
+    expect(getVisibleMilkdownEditor(container)).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "pasted-image.png" })).not.toBeInTheDocument();
   });
 
@@ -2240,17 +2277,17 @@ describe("Markra workspace", () => {
       };
     });
 
-    renderApp();
+    const { container } = renderApp();
 
     fireEvent.keyDown(window, { key: "o", metaKey: true });
     expect(await screen.findByRole("heading", { name: "vault" })).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/notes.md" }));
-    expect(await screen.findByText("Notes")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Notes");
 
     expect(mockedConfirmNativeUnsavedMarkdownDocumentDiscard).not.toHaveBeenCalled();
   });
@@ -2306,8 +2343,79 @@ describe("Markra workspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
 
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
     expect(screen.getByRole("tab", { name: /guide\.md/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps visual undo history after switching document tabs", async () => {
+    const guidePath = "/mock-files/vault/docs/guide.md";
+    const notesPath = "/mock-files/vault/docs/notes.md";
+    mockedOpenNativeMarkdownPath.mockResolvedValue({
+      kind: "folder",
+      folder: {
+        path: mockFolderPath,
+        name: "vault"
+      }
+    });
+    mockedListNativeMarkdownFilesForPath.mockResolvedValue([
+      { name: "guide.md", path: guidePath, relativePath: "docs/guide.md" },
+      { name: "notes.md", path: notesPath, relativePath: "docs/notes.md" }
+    ]);
+    mockedReadNativeMarkdownFile.mockImplementation(async (path) => {
+      if (path === guidePath) {
+        return {
+          content: "# Guide",
+          name: "guide.md",
+          path: guidePath
+        };
+      }
+
+      return {
+        content: "# Notes",
+        name: "notes.md",
+        path: notesPath
+      };
+    });
+
+    const { container } = renderApp();
+
+    fireEvent.keyDown(window, { key: "o", metaKey: true });
+    expect(await screen.findByRole("heading", { name: "vault" })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "docs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
+    await expectVisibleMilkdownText(container, "Guide");
+
+    fireEvent.click(await screen.findByRole("button", { name: "docs/notes.md" }));
+    await expectVisibleMilkdownText(container, "Notes");
+
+    fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
+    await expectVisibleMilkdownText(container, "Guide");
+    await waitFor(() => expect(mockedInstallNativeApplicationMenu).toHaveBeenCalled());
+    const menuHandlers = mockedInstallNativeApplicationMenu.mock.calls.at(-1)?.[0] as NativeMenuHandlers;
+
+    act(() => {
+      menuHandlers.insertTable?.();
+    });
+    await waitFor(() => expect(queryVisibleMilkdownTable(container)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Unsaved changes")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("tab", { name: /notes\.md/ }));
+    await expectVisibleMilkdownText(container, "Notes");
+
+    fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
+    await expectVisibleMilkdownText(container, "Guide");
+    await waitFor(() => expect(queryVisibleMilkdownTable(container)).toBeInTheDocument());
+
+    act(() => {
+      menuHandlers.editUndo?.();
+    });
+    await waitFor(() => expect(queryVisibleMilkdownTable(container)).not.toBeInTheDocument());
+
+    act(() => {
+      menuHandlers.editRedo?.();
+    });
+    await waitFor(() => expect(queryVisibleMilkdownTable(container)).toBeInTheDocument());
   });
 
   it("opens a document tab to a side editor, toggles both panes to source mode, and closes the side tab from the titlebar", async () => {
@@ -2356,16 +2464,16 @@ describe("Markra workspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/notes.md" }));
-    expect(await screen.findByText("Notes")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Notes");
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/third.md" }));
-    expect(await screen.findByText("Third")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Third");
 
     fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
 
     fireEvent.contextMenu(screen.getByRole("tab", { name: /notes\.md/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Open to side" }));
@@ -2419,7 +2527,7 @@ describe("Markra workspace", () => {
     );
 
     const sideSource = await within(replacedSidePane).findByRole("textbox", { name: "Markdown source" });
-    expect(readMarkdownSource(sideSource)).toBe("# Third\n\nIndependent");
+    expect(readMarkdownSource(sideSource).trimEnd()).toBe("# Third\n\nIndependent");
 
     replaceMarkdownSource(sideSource, "# Third\n\nIndependent update");
     expect(screen.getByRole("tab", { name: /guide\.md/ })).toHaveAttribute("aria-selected", "true");
@@ -2652,16 +2760,16 @@ describe("Markra workspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/1.md" }));
-    expect(await screen.findByText("First")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "First");
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/2.md" }));
-    expect(await screen.findByText("Second")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Second");
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/3.md" }));
-    expect(await screen.findByText("Third")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Third");
 
     fireEvent.click(screen.getByRole("tab", { name: /1\.md/ }));
-    expect(await screen.findByText("First")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "First");
 
     fireEvent.contextMenu(screen.getByRole("tab", { name: /2\.md/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Open to side" }));
@@ -2689,7 +2797,7 @@ describe("Markra workspace", () => {
     expect(mockedConfirmNativeUnsavedMarkdownDocumentDiscard).not.toHaveBeenCalled();
 
     fireEvent.click(within(inactiveGroup).getByRole("tab", { name: /2\.md/ }));
-    expect(await screen.findByText("First")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "First");
     await waitFor(() => expect(container.querySelector(".editor-side-by-side-surface")).toBeInTheDocument());
     fireEvent.contextMenu(screen.getByRole("tab", { name: /2\.md/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Open to side" }));
@@ -3002,18 +3110,18 @@ describe("Markra workspace", () => {
       };
     });
 
-    renderApp();
+    const { container } = renderApp();
 
     fireEvent.keyDown(window, { key: "o", metaKey: true });
     expect(await screen.findByRole("heading", { name: "vault" })).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
     fireEvent.click(await screen.findByRole("button", { name: "docs/guide.md" }));
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Guide");
     await waitFor(() => expect(screen.getByRole("tab", { name: /guide\.md/ })).toHaveAttribute("aria-selected", "true"));
     await settleEditorUpdates();
 
-    const guideScroll = screen.getByLabelText("Writing surface");
+    const guideScroll = getVisibleWritingSurface(container);
     mockScrollMetrics(guideScroll, {
       clientHeight: 300,
       scrollHeight: 1200,
@@ -3022,11 +3130,11 @@ describe("Markra workspace", () => {
     fireEvent.scroll(guideScroll);
 
     fireEvent.click(await screen.findByRole("button", { name: "docs/notes.md" }));
-    expect(await screen.findByText("Notes")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Notes");
     await waitFor(() => expect(screen.getByRole("tab", { name: /notes\.md/ })).toHaveAttribute("aria-selected", "true"));
     await settleEditorUpdates();
 
-    const notesScroll = screen.getByLabelText("Writing surface");
+    const notesScroll = getVisibleWritingSurface(container);
     mockScrollMetrics(notesScroll, {
       clientHeight: 300,
       scrollHeight: 1200,
@@ -3036,8 +3144,8 @@ describe("Markra workspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /guide\.md/ }));
 
-    expect(await screen.findByText("Guide")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText("Writing surface").scrollTop).toBe(240));
+    await expectVisibleMilkdownText(container, "Guide");
+    await waitFor(() => expect(getVisibleWritingSurface(container).scrollTop).toBe(240));
   });
 
   it("renames an opened markdown file from a titlebar tab double click", async () => {
@@ -3350,10 +3458,10 @@ describe("Markra workspace", () => {
       path: mockUntitledPath
     });
 
-    renderApp();
+    const { container } = renderApp();
 
     fireEvent.keyDown(window, { key: "o", metaKey: true });
-    expect(await screen.findByText("Native file")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Native file");
     expect(screen.getByRole("button", { name: "Toggle file list" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "New file" })).not.toBeInTheDocument();
 
@@ -3363,7 +3471,7 @@ describe("Markra workspace", () => {
     expect(mockedSaveNativeMarkdownFile).not.toHaveBeenCalled();
     expect(screen.getByRole("tab", { name: /Untitled\.md/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Unsaved changes")).toBeInTheDocument();
-    expect(screen.queryByText("Native file")).not.toBeInTheDocument();
+    expect(within(getVisibleMilkdownEditor(container)).queryByText("Native file")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save Markdown" }));
 
@@ -3974,9 +4082,73 @@ describe("Markra workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to visual mode" }));
 
-    expect(await screen.findByText("Source edit")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Source edit" })).toBeInTheDocument();
     expect(screen.getByText("Updated from source mode.")).toBeInTheDocument();
     expect(screen.getByLabelText("Markdown editor")).toHaveAttribute("data-editor-engine", "milkdown");
+  });
+
+  it("keeps visual undo history after switching to source mode and back", async () => {
+    const { container } = renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+    await waitFor(() => expect(mockedInstallNativeApplicationMenu).toHaveBeenCalledTimes(1));
+    const menuHandlers = mockedInstallNativeApplicationMenu.mock.calls[0]?.[0] as NativeMenuHandlers;
+
+    act(() => {
+      menuHandlers.insertTable?.();
+    });
+
+    await waitFor(() => expect(container.querySelector(".ProseMirror table")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Unsaved changes")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to source mode" }));
+    const sourceEditor = await screen.findByRole("textbox", { name: "Markdown source" });
+    await waitFor(() => expect(readMarkdownSource(sourceEditor)).toContain("| - | - |"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to visual mode" }));
+    await waitFor(() => expect(container.querySelector(".ProseMirror table")).toBeInTheDocument());
+
+    act(() => {
+      menuHandlers.editUndo?.();
+    });
+    await waitFor(() => expect(container.querySelector(".ProseMirror table")).not.toBeInTheDocument());
+
+    act(() => {
+      menuHandlers.editRedo?.();
+    });
+    await waitFor(() => expect(container.querySelector(".ProseMirror table")).toBeInTheDocument());
+  });
+
+  it("keeps source edits undoable after switching back to visual mode", async () => {
+    renderApp();
+
+    expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+    await waitFor(() => expect(mockedInstallNativeApplicationMenu).toHaveBeenCalledTimes(1));
+    const menuHandlers = mockedInstallNativeApplicationMenu.mock.calls[0]?.[0] as NativeMenuHandlers;
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to source mode" }));
+    replaceMarkdownSource(
+      await screen.findByRole("textbox", { name: "Markdown source" }),
+      "# Source history\n\nShared undo."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to visual mode" }));
+    expect(await screen.findByRole("heading", { name: "Source history" })).toBeInTheDocument();
+    expect(screen.getByText("Shared undo.")).toBeInTheDocument();
+
+    act(() => {
+      menuHandlers.editUndo?.();
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Source history" })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole("heading", { name: "Welcome to Markra" })).toBeInTheDocument();
+
+    act(() => {
+      menuHandlers.editRedo?.();
+    });
+    expect(await screen.findByRole("heading", { name: "Source history" })).toBeInTheDocument();
+    expect(screen.getByText("Shared undo.")).toBeInTheDocument();
   });
 
   it("keeps callout body line breaks when switching from source to visual mode", async () => {
@@ -4182,6 +4354,7 @@ describe("Markra workspace", () => {
     const { container } = renderApp();
 
     expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+    await settleEditorUpdates();
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
 
@@ -4305,15 +4478,28 @@ describe("Markra workspace", () => {
     const { container } = renderApp();
 
     expect(await screen.findByText("Welcome to Markra")).toBeInTheDocument();
+    await settleEditorUpdates();
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to split mode" }));
-    expect(await screen.findByRole("textbox", { name: "Markdown source" })).toBeInTheDocument();
+    const sourceEditor = await screen.findByRole("textbox", { name: "Markdown source" });
 
-    const [visualScroll, sourceScroll] = Array.from(
+    const splitScrollElements = Array.from(
       container.querySelectorAll<HTMLElement>(".editor-split-surface .paper-scroll")
     );
+    const sourceScroll = sourceEditor.closest<HTMLElement>(".paper-scroll");
+    const visualScroll = splitScrollElements.find((element) => element !== sourceScroll && !element.closest("[hidden]")) ?? null;
     expect(sourceScroll).toBeInTheDocument();
     expect(visualScroll).toBeInTheDocument();
+
+    const resyncFrames: FrameRequestCallback[] = [];
+    const flushResyncFrames = () => {
+      const frames = resyncFrames.splice(0);
+      frames.forEach((frame) => frame(0));
+    };
+    const requestAnimationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      resyncFrames.push(callback);
+      return resyncFrames.length;
+    });
 
     mockScrollMetrics(sourceScroll!, {
       clientHeight: 200,
@@ -4335,13 +4521,12 @@ describe("Markra workspace", () => {
       scrollTop: visualScroll!.scrollTop
     });
 
-    await act(async () => {
-      await new Promise<void>((resolve) => {
-        window.requestAnimationFrame(() => resolve());
-      });
+    act(() => {
+      flushResyncFrames();
     });
 
     expect(visualScroll!.scrollTop).toBe(150);
+    requestAnimationFrameSpy.mockRestore();
   });
 
   it("keeps scroll progress when an opened file switches from visual to source mode", async () => {
