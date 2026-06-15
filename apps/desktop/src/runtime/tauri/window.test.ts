@@ -12,6 +12,7 @@ import {
   minimizeNativeWindow,
   openSettingsWindow,
   setNativeEditorWindowRestoreState,
+  showNativeWindow,
   toggleNativeWindowFullscreen,
   toggleNativeWindowMaximized
 } from "./window";
@@ -114,6 +115,17 @@ describe("native window actions", () => {
     expect(mockedGetCurrentWindow).not.toHaveBeenCalled();
   });
 
+  it("shows the current Tauri window", async () => {
+    const show = vi.fn().mockResolvedValue(undefined);
+    const setFocus = vi.fn().mockResolvedValue(undefined);
+    mockedGetCurrentWindow.mockReturnValue({ show, setFocus } as unknown as ReturnType<typeof getCurrentWindow>);
+
+    await showNativeWindow();
+
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(setFocus).toHaveBeenCalledTimes(1);
+  });
+
   it("toggles the current Tauri window maximized state", async () => {
     const toggleMaximize = vi.fn().mockResolvedValue(undefined);
     mockedGetCurrentWindow.mockReturnValue({ toggleMaximize } as unknown as ReturnType<typeof getCurrentWindow>);
@@ -139,6 +151,7 @@ describe("native window actions", () => {
 
     await closeNativeWindow();
     await minimizeNativeWindow();
+    await showNativeWindow();
     await toggleNativeWindowFullscreen();
     await toggleNativeWindowMaximized();
 

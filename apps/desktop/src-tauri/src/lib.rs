@@ -43,6 +43,7 @@ use opened_files::{
 };
 use remote_sync::sync_webdav_markdown_folder;
 use tauri::Manager;
+use tauri_plugin_window_state::StateFlags;
 use watcher::{
     unwatch_markdown_file, unwatch_markdown_tree, watch_markdown_file, watch_markdown_tree,
     MarkdownFileWatcherState, MarkdownTreeWatcherState,
@@ -57,6 +58,10 @@ use windows::{
     minimize_current_window, open_blank_editor_window, open_settings_window,
     spawn_blank_editor_window, spawn_settings_window,
 };
+
+fn window_state_restore_flags() -> StateFlags {
+    StateFlags::all() - StateFlags::VISIBLE
+}
 
 fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
@@ -82,7 +87,11 @@ pub fn run() {
     }));
 
     #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-    let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+    let builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .with_state_flags(window_state_restore_flags())
+            .build(),
+    );
 
     builder
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -243,8 +252,19 @@ mod tests {
 
         let lib_source = include_str!("lib.rs");
         assert!(
-            lib_source.contains("tauri_plugin_window_state::Builder::default().build()"),
+            lib_source.contains("tauri_plugin_window_state::Builder::default()")
+                && lib_source.contains(".with_state_flags(window_state_restore_flags())"),
             "Tauri builder should register the window state restore plugin"
+        );
+    }
+
+    #[test]
+    fn desktop_window_state_restore_does_not_auto_show_window() {
+        let flags = crate::window_state_restore_flags();
+
+        assert!(
+            !flags.contains(tauri_plugin_window_state::StateFlags::VISIBLE),
+            "window-state should not restore visibility before the frontend startup reveal"
         );
     }
 
