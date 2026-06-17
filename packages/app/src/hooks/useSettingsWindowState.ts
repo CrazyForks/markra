@@ -57,11 +57,15 @@ import { runMarkdownSync } from "../lib/sync";
 import {
   detectNativePandocPath,
   deleteNativeMarkdownTemplateFile,
+  getNativeShellCommandStatus,
+  installNativeShellCommand,
   openNativeMarkdownFolder,
   readNativeMarkdownTemplateFile,
   requestNativeAiJson,
+  uninstallNativeShellCommand,
   writeNativeMarkdownTemplateFile
 } from "../lib/tauri";
+import type { NativeShellCommandStatus } from "../lib/tauri/shell-command";
 import { showAppToast } from "../lib/app-toast";
 import {
   listenNativeSettingsWindowTarget,
@@ -129,6 +133,8 @@ export function useSettingsWindowState() {
   const [exportSettings, setExportSettings] = useState<ExportSettings>(defaultExportSettings);
   const [networkSettings, setNetworkSettings] = useState<NetworkSettings>(defaultNetworkSettings);
   const [webSearchSettings, setWebSearchSettings] = useState<WebSearchSettings>(defaultWebSearchSettings);
+  const [shellCommandStatus, setShellCommandStatus] = useState<NativeShellCommandStatus | null>(null);
+  const [shellCommandRunning, setShellCommandRunning] = useState(false);
   const [selectedAiProviderId, setSelectedAiProviderId] = useState<string | undefined>(
     () => createDefaultAiSettings().defaultProviderId
   );
@@ -254,6 +260,28 @@ export function useSettingsWindowState() {
     getStoredExportSettings().then((settings) => {
       if (!cancelled) setExportSettings(settings);
     }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refreshShellCommandStatus = useCallback(() => {
+    getNativeShellCommandStatus()
+      .then((status) => setShellCommandStatus(status))
+      .catch(() => setShellCommandStatus({ commandPath: null, targetPath: null, status: "unavailable" }));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getNativeShellCommandStatus()
+      .then((status) => {
+        if (!cancelled) setShellCommandStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setShellCommandStatus({ commandPath: null, targetPath: null, status: "unavailable" });
+      });
 
     return () => {
       cancelled = true;
@@ -441,6 +469,50 @@ export function useSettingsWindowState() {
     });
   }, [exportSettings, handleUpdateExportSettings, translate]);
 
+  const handleInstallShellCommand = useCallback(() => {
+    if (shellCommandRunning) return;
+
+    setShellCommandRunning(true);
+    installNativeShellCommand()
+      .then((status) => {
+        setShellCommandStatus(status);
+        showAppToast({
+          message: translate("settings.shellCommand.installSucceeded"),
+          status: "success"
+        });
+      })
+      .catch(() => {
+        refreshShellCommandStatus();
+        showAppToast({
+          message: translate("settings.shellCommand.actionFailed"),
+          status: "error"
+        });
+      })
+      .finally(() => setShellCommandRunning(false));
+  }, [refreshShellCommandStatus, shellCommandRunning, translate]);
+
+  const handleUninstallShellCommand = useCallback(() => {
+    if (shellCommandRunning) return;
+
+    setShellCommandRunning(true);
+    uninstallNativeShellCommand()
+      .then((status) => {
+        setShellCommandStatus(status);
+        showAppToast({
+          message: translate("settings.shellCommand.uninstallSucceeded"),
+          status: "success"
+        });
+      })
+      .catch(() => {
+        refreshShellCommandStatus();
+        showAppToast({
+          message: translate("settings.shellCommand.actionFailed"),
+          status: "error"
+        });
+      })
+      .finally(() => setShellCommandRunning(false));
+  }, [refreshShellCommandStatus, shellCommandRunning, translate]);
+
   const handleUpdateWebSearchSettings = useCallback((settings: WebSearchSettings) => {
     const normalizedSettings = normalizeWebSearchSettings(settings);
     setWebSearchSettings(normalizedSettings);
@@ -589,12 +661,15 @@ export function useSettingsWindowState() {
     handleUpdateAiSettings,
     handleRunBackup,
     handleRunSync,
+    handleInstallShellCommand,
     handleUpdateBackupSettings,
     handleUpdateSyncSettings,
     handleUpdateEditorPreferences,
     handleUpdateExportSettings,
     handleUpdateNetworkSettings,
     handleDetectPandocPath,
+    handleRefreshShellCommandStatus: refreshShellCommandStatus,
+    handleUninstallShellCommand,
     handleUpdateWebSearchSettings,
     selectedAiProvider,
     setActiveCategory: handleSelectCategory,
@@ -602,6 +677,8 @@ export function useSettingsWindowState() {
     markdownTemplates,
     networkSettings,
     settingsFocusTarget,
+    shellCommandRunning,
+    shellCommandStatus,
     syncRunning,
     syncSettings,
     clearSettingsFocusTarget,

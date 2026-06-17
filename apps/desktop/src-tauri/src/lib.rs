@@ -11,6 +11,7 @@ mod menu_labels;
 mod network;
 mod opened_files;
 mod remote_sync;
+mod shell_command;
 mod watcher;
 mod web_http;
 mod window_state;
@@ -42,10 +43,12 @@ use menu::{
     NativeApplicationMenuState, NativeMenuTargetState,
 };
 use opened_files::{
-    opened_markdown_paths_from_args, opened_markdown_paths_from_urls, queue_opened_markdown_paths,
-    take_opened_markdown_paths, OpenedMarkdownPathsState,
+    opened_markdown_paths_from_args, opened_markdown_paths_from_args_with_cwd,
+    opened_markdown_paths_from_urls, queue_opened_markdown_paths, take_opened_markdown_paths,
+    OpenedMarkdownPathsState,
 };
 use remote_sync::sync_webdav_markdown_folder;
+use shell_command::{get_shell_command_status, install_shell_command, uninstall_shell_command};
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 use watcher::{
@@ -109,8 +112,11 @@ pub fn run() {
         .manage(EditorWindowRestoreState::default());
 
     #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-        queue_opened_markdown_paths(app, opened_markdown_paths_from_args(args));
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        queue_opened_markdown_paths(
+            app,
+            opened_markdown_paths_from_args_with_cwd(args, std::path::PathBuf::from(cwd)),
+        );
         focus_main_window(app);
     }));
 
@@ -211,6 +217,9 @@ pub fn run() {
             watch_markdown_tree,
             unwatch_markdown_tree,
             take_opened_markdown_paths,
+            get_shell_command_status,
+            install_shell_command,
+            uninstall_shell_command,
             set_editor_window_restore_state,
             list_editor_window_restore_states
         ])
