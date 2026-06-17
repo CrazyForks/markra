@@ -1,8 +1,18 @@
 use std::env;
 use std::fs;
+#[cfg(windows)]
+use std::io;
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
-use std::process::Command;
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+};
+#[cfg(windows)]
+use winreg::{
+    enums::{RegType, HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ},
+    types::FromRegValue,
+    RegKey, RegValue,
+};
 
 const COMMAND_NAME: &str = "markra";
 const MANAGED_MARKER: &str = "Managed by Markra";
@@ -191,57 +201,6 @@ fn windows_path_with_dir(path_value: &str, dir: &Path) -> String {
 }
 
 #[cfg(windows)]
-fn run_windows_powershell(script: &str, args: &[&str]) -> Result<String, String> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-    let output = Command::new("powershell.exe")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .args(args)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if stderr.is_empty() {
-            return Err("PowerShell command failed.".to_string());
-        }
-
-        return Err(stderr);
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .trim_end_matches(['\r', '\n'])
-        .to_string())
-}
-
-#[cfg(windows)]
-fn windows_user_path() -> Result<String, String> {
-    run_windows_powershell(
-        "[Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; $value = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($null -ne $value) { [Console]::Write($value) }",
-        &[],
-    )
-}
-
-#[cfg(windows)]
-fn set_windows_user_path(path_value: &str) -> Result<(), String> {
-    run_windows_powershell(
-        "[Environment]::SetEnvironmentVariable('Path', $args[0], 'User')",
-        &[path_value],
-    )
-    .map(|_| ())
-}
-
-#[cfg(windows)]
 fn ensure_process_path_contains_dir(dir: &Path) {
     let path_value = env::var_os("PATH")
         .map(|value| value.to_string_lossy().to_string())
@@ -252,6 +211,85 @@ fn ensure_process_path_contains_dir(dir: &Path) {
     }
 
     env::set_var("PATH", windows_path_with_dir(&path_value, dir));
+}
+
+#[cfg(windows)]
+fn windows_user_environment_key() -> Result<RegKey, String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    hkcu.create_subkey("Environment")
+        .map(|(key, _)| key)
+        .map_err(|error| format!("Failed to open the user environment registry key: {error}"))
+}
+
+#[cfg(windows)]
+fn windows_user_path_value(key: &RegKey) -> Result<Option<RegValue>, String> {
+    match key
+        .get_raw_value("Path")
+        .or_else(|_| key.get_raw_value("PATH"))
+    {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Failed to read the user PATH: {error}")),
+    }
+}
+
+#[cfg(windows)]
+fn registry_string_value(value: &str, vtype: RegType) -> RegValue {
+    let mut bytes = Vec::new();
+    for word in value.encode_utf16().chain(std::iter::once(0)) {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+
+    RegValue { bytes, vtype }
+}
+
+#[cfg(windows)]
+fn windows_user_path() -> Result<String, String> {
+    let key = windows_user_environment_key()?;
+    let Some(value) = windows_user_path_value(&key)? else {
+        return Ok(String::new());
+    };
+
+    String::from_reg_value(&value)
+        .map_err(|error| format!("Failed to decode the user PATH: {error}"))
+}
+
+#[cfg(windows)]
+fn set_windows_user_path(path_value: &str) -> Result<(), String> {
+    let key = windows_user_environment_key()?;
+    let value_type = windows_user_path_value(&key)?
+        .map(|value| match value.vtype {
+            REG_SZ | REG_EXPAND_SZ => value.vtype,
+            _ => REG_EXPAND_SZ,
+        })
+        .unwrap_or(REG_EXPAND_SZ);
+    let value = registry_string_value(path_value, value_type);
+
+    key.set_raw_value("Path", &value)
+        .map_err(|error| format!("Failed to update the user PATH: {error}"))?;
+    broadcast_windows_environment_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn broadcast_windows_environment_change() {
+    let environment = "Environment"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut result = 0usize;
+
+    unsafe {
+        let _ = SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            environment.as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            5000,
+            &mut result,
+        );
+    }
 }
 
 #[cfg(windows)]
@@ -525,5 +563,17 @@ mod tests {
             r"C:\WINDOWS\system32;c:\users\mock\appdata\local\markra\bin\",
             &install_dir
         ));
+    }
+
+    #[test]
+    fn windows_path_updates_do_not_depend_on_powershell() {
+        let source = include_str!("shell_command.rs");
+        let command_new = ["Command", "::new("].concat();
+        let process_command = ["std::process", "::Command"].concat();
+
+        assert!(
+            !source.contains(&command_new) && !source.contains(&process_command),
+            "updating the Windows user PATH should use registry APIs instead of shelling out"
+        );
     }
 }

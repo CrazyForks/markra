@@ -110,6 +110,16 @@ function settingsFocusTargetForNativeTarget(target: NativeSettingsWindowTarget |
   return target === "exportPandocPath" ? "pandocPath" : null;
 }
 
+export function shellCommandActionFailureMessage(baseMessage: string, error: unknown) {
+  const detail = error instanceof Error
+    ? error.message.trim()
+    : typeof error === "string"
+      ? error.trim()
+      : "";
+
+  return detail ? `${baseMessage} ${detail}` : baseMessage;
+}
+
 export function useSettingsWindowState() {
   const appTheme = useAppTheme();
   const appLanguage = useAppLanguage();
@@ -481,10 +491,10 @@ export function useSettingsWindowState() {
           status: "success"
         });
       })
-      .catch(() => {
+      .catch((error) => {
         refreshShellCommandStatus();
         showAppToast({
-          message: translate("settings.shellCommand.actionFailed"),
+          message: shellCommandActionFailureMessage(translate("settings.shellCommand.actionFailed"), error),
           status: "error"
         });
       })
@@ -503,10 +513,10 @@ export function useSettingsWindowState() {
           status: "success"
         });
       })
-      .catch(() => {
+      .catch((error) => {
         refreshShellCommandStatus();
         showAppToast({
-          message: translate("settings.shellCommand.actionFailed"),
+          message: shellCommandActionFailureMessage(translate("settings.shellCommand.actionFailed"), error),
           status: "error"
         });
       })
