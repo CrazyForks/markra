@@ -1,6 +1,8 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::process::Command;
 
 const COMMAND_NAME: &str = "markra";
 const MANAGED_MARKER: &str = "Managed by Markra";
@@ -87,18 +89,20 @@ fn standard_install_dirs() -> Vec<PathBuf> {
         dirs.push(PathBuf::from("/usr/local/bin"));
     }
 
-    if let Some(home) = dirs::home_dir() {
-        dirs.push(home.join(".local/bin"));
-        dirs.push(home.join("bin"));
-    }
+    if cfg!(windows) {
+        #[cfg(windows)]
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local_app_data).join("Markra").join("bin"));
+        }
+    } else {
+        if let Some(home) = dirs::home_dir() {
+            dirs.push(home.join(".local/bin"));
+            dirs.push(home.join("bin"));
+        }
 
-    if cfg!(target_os = "linux") {
-        dirs.push(PathBuf::from("/usr/local/bin"));
-    }
-
-    #[cfg(windows)]
-    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-        dirs.push(PathBuf::from(local_app_data).join("Markra").join("bin"));
+        if cfg!(target_os = "linux") {
+            dirs.push(PathBuf::from("/usr/local/bin"));
+        }
     }
 
     dirs
@@ -156,6 +160,141 @@ fn managed_target_from_command(path: &Path) -> Option<PathBuf> {
     })
 }
 
+#[cfg(any(windows, test))]
+fn normalized_windows_path_entry(value: &str) -> String {
+    let trimmed = value.trim().trim_matches('"').trim_end_matches(['\\', '/']);
+
+    trimmed.replace('/', "\\").to_ascii_lowercase()
+}
+
+#[cfg(any(windows, test))]
+fn windows_path_contains_dir(path_value: &str, dir: &Path) -> bool {
+    let dir = normalized_windows_path_entry(&path_to_string(dir));
+    path_value
+        .split(';')
+        .any(|entry| normalized_windows_path_entry(entry) == dir)
+}
+
+#[cfg(any(windows, test))]
+fn windows_path_with_dir(path_value: &str, dir: &Path) -> String {
+    if windows_path_contains_dir(path_value, dir) {
+        return path_value.to_string();
+    }
+
+    let dir = path_to_string(dir);
+    let path_value = path_value.trim_end_matches(';');
+    if path_value.trim().is_empty() {
+        return dir;
+    }
+
+    format!("{path_value};{dir}")
+}
+
+#[cfg(windows)]
+fn run_windows_powershell(script: &str, args: &[&str]) -> Result<String, String> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let output = Command::new("powershell.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            return Err("PowerShell command failed.".to_string());
+        }
+
+        return Err(stderr);
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_end_matches(['\r', '\n'])
+        .to_string())
+}
+
+#[cfg(windows)]
+fn windows_user_path() -> Result<String, String> {
+    run_windows_powershell(
+        "[Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; $value = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($null -ne $value) { [Console]::Write($value) }",
+        &[],
+    )
+}
+
+#[cfg(windows)]
+fn set_windows_user_path(path_value: &str) -> Result<(), String> {
+    run_windows_powershell(
+        "[Environment]::SetEnvironmentVariable('Path', $args[0], 'User')",
+        &[path_value],
+    )
+    .map(|_| ())
+}
+
+#[cfg(windows)]
+fn ensure_process_path_contains_dir(dir: &Path) {
+    let path_value = env::var_os("PATH")
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    if windows_path_contains_dir(&path_value, dir) {
+        return;
+    }
+
+    env::set_var("PATH", windows_path_with_dir(&path_value, dir));
+}
+
+#[cfg(windows)]
+fn ensure_windows_user_path_contains_dir(dir: &Path) -> Result<(), String> {
+    let user_path = windows_user_path()?;
+    let next_user_path = windows_path_with_dir(&user_path, dir);
+
+    if next_user_path != user_path {
+        set_windows_user_path(&next_user_path)?;
+    }
+
+    ensure_process_path_contains_dir(dir);
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn ensure_windows_user_path_contains_dir(_dir: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn command_path_needs_shell_path_repair(command_path: &Path) -> bool {
+    let Some(command_dir) = command_path.parent() else {
+        return false;
+    };
+
+    let process_path = env::var_os("PATH")
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if windows_path_contains_dir(&process_path, command_dir) {
+        return false;
+    }
+
+    windows_user_path()
+        .map(|user_path| !windows_path_contains_dir(&user_path, command_dir))
+        .unwrap_or(true)
+}
+
+#[cfg(not(windows))]
+fn command_path_needs_shell_path_repair(_command_path: &Path) -> bool {
+    false
+}
+
 fn paths_match(left: &Path, right: &Path) -> bool {
     match (left.canonicalize(), right.canonicalize()) {
         (Ok(left), Ok(right)) => left == right,
@@ -175,15 +314,25 @@ fn status_value(
     }
 }
 
+fn managed_command_status(
+    command_path: &Path,
+    target_path: &Path,
+    managed_target: &Path,
+    needs_path_repair: bool,
+) -> ShellCommandStatus {
+    let status = if paths_match(managed_target, target_path) && !needs_path_repair {
+        "installed"
+    } else {
+        "needsRepair"
+    };
+
+    status_value(Some(command_path), Some(target_path), status)
+}
+
 fn shell_command_status_for_target(target_path: &Path) -> ShellCommandStatus {
     if let Some(command_path) = existing_command_in_path() {
         if let Some(managed_target) = managed_target_from_command(&command_path) {
-            let status = if paths_match(&managed_target, target_path) {
-                "installed"
-            } else {
-                "needsRepair"
-            };
-            return status_value(Some(&command_path), Some(target_path), status);
+            return managed_command_status(&command_path, target_path, &managed_target, false);
         }
 
         return status_value(Some(&command_path), Some(target_path), "conflict");
@@ -195,12 +344,12 @@ fn shell_command_status_for_target(target_path: &Path) -> ShellCommandStatus {
 
     if command_path.is_file() {
         if let Some(managed_target) = managed_target_from_command(&command_path) {
-            let status = if paths_match(&managed_target, target_path) {
-                "installed"
-            } else {
-                "needsRepair"
-            };
-            return status_value(Some(&command_path), Some(target_path), status);
+            return managed_command_status(
+                &command_path,
+                target_path,
+                &managed_target,
+                command_path_needs_shell_path_repair(&command_path),
+            );
         }
 
         return status_value(Some(&command_path), Some(target_path), "conflict");
@@ -268,6 +417,10 @@ pub(crate) fn install_shell_command() -> Result<ShellCommandStatus, String> {
         })?;
 
     install_command_at(&command_path, &target_path)?;
+    if let Some(command_dir) = command_path.parent() {
+        ensure_windows_user_path_contains_dir(command_dir)?;
+    }
+
     Ok(shell_command_status_for_target(&target_path))
 }
 
@@ -341,5 +494,36 @@ mod tests {
         assert_eq!(status.status, "needsRepair");
 
         fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn detects_repair_when_a_managed_command_is_not_available_from_the_shell() {
+        let root = test_root("path-repair");
+        let command_path = root.join("markra.cmd");
+        let target = root.join("markra.exe");
+        fs::write(&target, "").expect("target should be created");
+
+        let status = managed_command_status(&command_path, &target, &target, true);
+
+        assert_eq!(status.status, "needsRepair");
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn appends_windows_install_dir_to_user_path_once() {
+        let install_dir = PathBuf::from(r"C:\Users\Mock\AppData\Local\Markra\bin");
+        let original_path = r"C:\Windows\System32;C:\Tools";
+        let next_path = windows_path_with_dir(original_path, &install_dir);
+
+        assert_eq!(
+            next_path,
+            r"C:\Windows\System32;C:\Tools;C:\Users\Mock\AppData\Local\Markra\bin"
+        );
+        assert_eq!(windows_path_with_dir(&next_path, &install_dir), next_path);
+        assert!(windows_path_contains_dir(
+            r"C:\WINDOWS\system32;c:\users\mock\appdata\local\markra\bin\",
+            &install_dir
+        ));
     }
 }
