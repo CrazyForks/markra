@@ -4,12 +4,13 @@ import path from "node:path";
 import { defineConfig } from "bumpp";
 
 const desktopPackagePath = "apps/desktop/package.json";
+const webPackagePath = "apps/web/package.json";
 const cargoManifestPath = "apps/desktop/src-tauri/Cargo.toml";
 const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
 const cargoLockPath = "apps/desktop/src-tauri/Cargo.lock";
 const changelogPath = "CHANGELOG.md";
 
-export const bumppFilePaths = ["package.json", desktopPackagePath];
+export const bumppFilePaths = ["package.json", desktopPackagePath, webPackagePath];
 
 export function updateCargoPackageVersion(contents, newVersion) {
   const lines = contents.split(/(?<=\n)/u);
