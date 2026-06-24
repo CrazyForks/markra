@@ -1,3 +1,16 @@
+## [0.16.0](https://github.com/markrahq/markra/compare/v0.15.1...v0.16.0) (2026-06-24)
+
+### Features
+
+* **ai:** add workspace change actions ([#400](https://github.com/markrahq/markra/issues/400)) ([ff72849](https://github.com/markrahq/markra/commit/ff72849057f842f3164cf1f0f6a8d8602490204b))
+* **app:** support pasted file attachments ([#403](https://github.com/markrahq/markra/issues/403)) ([3f7a337](https://github.com/markrahq/markra/commit/3f7a337f49e99fa951b58b82a6322d4c2798b626))
+* **editor:** add Mermaid diagram zoom controls ([#405](https://github.com/markrahq/markra/issues/405)) ([da3e8ea](https://github.com/markrahq/markra/commit/da3e8ea49ce6e6311f323a4a8d22b9a305840f9e))
+* **editor:** add table column width mode ([#402](https://github.com/markrahq/markra/issues/402)) ([d00a4ba](https://github.com/markrahq/markra/commit/d00a4ba66c8f0c0feaff0f956158a555daac82f1))
+
+### Performance Improvements
+
+* **app:** optimize workspace file loading ([#407](https://github.com/markrahq/markra/issues/407)) ([a4d0e3a](https://github.com/markrahq/markra/commit/a4d0e3a48bebdf63bbb6dffef67aaef083bf4704))
+
 ## [0.15.1](https://github.com/markrahq/markra/compare/v0.15.0...v0.15.1) (2026-06-24)
 
 ### Bug Fixes
