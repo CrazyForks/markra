@@ -1,3 +1,16 @@
+## [0.15.0](https://github.com/markrahq/markra/compare/v0.14.0...v0.15.0) (2026-06-24)
+
+### Features
+
+* **app:** add document link insights ([#391](https://github.com/markrahq/markra/issues/391)) ([0ee6d14](https://github.com/markrahq/markra/commit/0ee6d14700d700e307edeafa944a7d0e54b665a3))
+* **settings:** add config import and export ([#390](https://github.com/markrahq/markra/issues/390)) ([0b2769a](https://github.com/markrahq/markra/commit/0b2769ae90c1aee3d0043a808507e4d413e80a0f))
+
+### Bug Fixes
+
+* **app:** keep split resizer line below tabs ([#393](https://github.com/markrahq/markra/issues/393)) ([2feeb5a](https://github.com/markrahq/markra/commit/2feeb5aa0807a83e11a63a7d61c617f5895cdea3))
+* **app:** repair file tree input context menu edit actions ([#395](https://github.com/markrahq/markra/issues/395)) ([eb957ba](https://github.com/markrahq/markra/commit/eb957ba98c74c0607522173ec64fc39b916b1536))
+* **spellcheck:** ignore identifier-style words ([#392](https://github.com/markrahq/markra/issues/392)) ([4f5247b](https://github.com/markrahq/markra/commit/4f5247baab07cbfe873d6ba0883812ee2469b827))
+
 ## [0.14.0](https://github.com/markrahq/markra/compare/v0.13.3...v0.14.0) (2026-06-23)
 
 ### Features
