@@ -12,9 +12,26 @@ export const editorContentWidthPixels = {
 
 export const editorCustomContentWidthMin = 640;
 export const editorCustomContentWidthMax = 1280;
+export const editorWidthResizeGutterMin = 48;
 
 export function normalizeEditorContentWidthPx(value: unknown) {
   const width = clampNumber(value, editorCustomContentWidthMin, editorCustomContentWidthMax);
 
   return width === null ? null : Math.round(width);
+}
+
+export function shouldShowEditorWidthResizer({
+  aiAgentOpen,
+  editorAreaWidth,
+  editorContentWidth,
+  gutterMin = editorWidthResizeGutterMin
+}: {
+  aiAgentOpen: boolean;
+  editorAreaWidth: number;
+  editorContentWidth: number;
+  gutterMin?: number;
+}) {
+  if (!aiAgentOpen) return true;
+
+  return editorAreaWidth - editorContentWidth >= gutterMin * 2;
 }
