@@ -1,3 +1,18 @@
+## [0.16.1](https://github.com/markrahq/markra/compare/v0.16.0...v0.16.1) (2026-06-25)
+
+### Features
+
+* **editor:** default tables to auto column width ([#418](https://github.com/markrahq/markra/issues/418)) ([e26d0ed](https://github.com/markrahq/markra/commit/e26d0ed35cbe91f6ecde59924ac418bd8433fd66)), closes [#412](https://github.com/markrahq/markra/issues/412)
+* **ui:** add themed tooltip component ([#411](https://github.com/markrahq/markra/issues/411)) ([e002b23](https://github.com/markrahq/markra/commit/e002b234a53d3ace2b7cea95a39859c56eeb88fa))
+
+### Bug Fixes
+
+* **app:** improve editor resize behavior ([#414](https://github.com/markrahq/markra/issues/414)) ([794be68](https://github.com/markrahq/markra/commit/794be683e821b12ff1a7c413e4aca5542cbabb67))
+* **desktop:** hide Windows verbatim path prefixes ([#410](https://github.com/markrahq/markra/issues/410)) ([f5f96b7](https://github.com/markrahq/markra/commit/f5f96b711c9617f8fc81375357b8f7f43b591a29))
+* **editor:** add table cell soft line breaks ([#416](https://github.com/markrahq/markra/issues/416)) ([a7d62ff](https://github.com/markrahq/markra/commit/a7d62ff24d5df71d5554607e32ffd47217fc2346)), closes [#413](https://github.com/markrahq/markra/issues/413)
+* **editor:** copy tables as markdown text ([#417](https://github.com/markrahq/markra/issues/417)) ([2b84b13](https://github.com/markrahq/markra/commit/2b84b13db0078767409cdb8b1295807b1f5cb3e0)), closes [#415](https://github.com/markrahq/markra/issues/415)
+* **editor:** improve caret behavior around inline marks ([#409](https://github.com/markrahq/markra/issues/409)) ([a0f1e48](https://github.com/markrahq/markra/commit/a0f1e48c25369ad238930415fa109038ed6b6749))
+
 ## [0.16.0](https://github.com/markrahq/markra/compare/v0.15.1...v0.16.0) (2026-06-24)
 
 ### Features
