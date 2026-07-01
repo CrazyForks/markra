@@ -1,3 +1,9 @@
+## [0.17.1](https://github.com/markrahq/markra/compare/v0.17.0...v0.17.1) (2026-07-01)
+
+### Bug Fixes
+
+* **app:** keep split source pane synced ([#441](https://github.com/markrahq/markra/issues/441)) ([7b4af11](https://github.com/markrahq/markra/commit/7b4af11898de85260cec82be79092d36c06ec0a9)), closes [#440](https://github.com/markrahq/markra/issues/440)
+
 ## [0.17.0](https://github.com/markrahq/markra/compare/v0.16.4...v0.17.0) (2026-06-30)
 
 ### Features
