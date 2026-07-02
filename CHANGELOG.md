@@ -1,3 +1,16 @@
+## [1.0.1](https://github.com/markrahq/markra/compare/v1.0.0...v1.0.1) (2026-07-02)
+
+### Bug Fixes
+
+* **desktop:** stabilize settings startup window reveal ([#443](https://github.com/markrahq/markra/issues/443)) ([8f9d8e6](https://github.com/markrahq/markra/commit/8f9d8e6c092877d462d403ebf78d42769af4909a))
+* **editor:** preserve spreadsheet table paste data ([#452](https://github.com/markrahq/markra/issues/452)) ([eb298f5](https://github.com/markrahq/markra/commit/eb298f5a9fde87758ddab8ef2de1d39cf75774db))
+* **editor:** render formatted soft line breaks ([#451](https://github.com/markrahq/markra/issues/451)) ([c251a1d](https://github.com/markrahq/markra/commit/c251a1d4ee5732fbbd9cce85977fdfaf12273bcd))
+* **editor:** render raw HTML badge rows inline ([#446](https://github.com/markrahq/markra/issues/446)) ([1c32be4](https://github.com/markrahq/markra/commit/1c32be4110b41e050dc3eb5e3600d52a1fd8eb04))
+
+### Performance Improvements
+
+* **app:** smooth file tree sidebar opening ([#448](https://github.com/markrahq/markra/issues/448)) ([2464dd6](https://github.com/markrahq/markra/commit/2464dd6833190fd0c52dbc92ee08c2c3193662ae))
+
 ## [1.0.0](https://github.com/markrahq/markra/compare/v0.17.1...v1.0.0) (2026-07-01)
 
 ## [1.0.0-rc.0](https://github.com/markrahq/markra/compare/v0.17.1...v1.0.0-rc.0) (2026-07-01)
