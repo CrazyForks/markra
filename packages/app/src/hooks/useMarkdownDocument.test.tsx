@@ -1260,6 +1260,58 @@ describe("useMarkdownDocument", () => {
     expect(preventDefault).not.toHaveBeenCalled();
   });
 
+  it("waits for dirty draft persistence before allowing native window close", async () => {
+    let closeRequestHandler: ((event: MockWindowCloseRequestEvent) => unknown | Promise<unknown>) | null = null;
+    const editorMarkdown = "# Scratch\n\nClose draft.";
+    let resolveWorkspaceSave!: () => undefined;
+    const workspaceSavePromise = new Promise<undefined>((resolve) => {
+      resolveWorkspaceSave = () => {
+        resolve(undefined);
+        return undefined;
+      };
+    });
+    mockedListenNativeWindowCloseRequested.mockImplementation(async (handler) => {
+      closeRequestHandler = handler;
+      return () => {};
+    });
+    mockedSaveStoredWorkspaceState.mockImplementation(async (patch) => {
+      if (patch.draftTabs?.some((draft) => draft.content === editorMarkdown)) {
+        return workspaceSavePromise;
+      }
+
+      return undefined;
+    });
+    renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: () => editorMarkdown,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    await waitFor(() => expect(mockedListenNativeWindowCloseRequested).toHaveBeenCalled());
+
+    let closeResolved = false;
+    const preventDefault = vi.fn();
+    const registeredCloseRequestHandler = closeRequestHandler as ((event: MockWindowCloseRequestEvent) => unknown | Promise<unknown>) | null;
+    if (!registeredCloseRequestHandler) throw new Error("native close request handler was not registered");
+    const closePromise = Promise.resolve(registeredCloseRequestHandler({ preventDefault })).then(() => {
+      closeResolved = true;
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(closeResolved).toBe(false);
+
+    await act(async () => {
+      resolveWorkspaceSave();
+      await closePromise;
+    });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
   it("prompts before web unload when the editor has unsaved markdown", () => {
     const editorMarkdown = "# Scratch\n\nUnsaved web draft.";
     renderHook(() =>
@@ -1381,6 +1433,58 @@ describe("useMarkdownDocument", () => {
     });
 
     expect(confirmDiscardUnsavedChanges).toHaveBeenCalledWith(expect.objectContaining({ name: "guide.md" }));
+    expect(mockedExitNativeApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for dirty draft persistence before exiting the native app", async () => {
+    let appExitHandler: (() => unknown | Promise<unknown>) | null = null;
+    const editorMarkdown = "# Scratch\n\nExit draft.";
+    let resolveWorkspaceSave!: () => undefined;
+    const workspaceSavePromise = new Promise<undefined>((resolve) => {
+      resolveWorkspaceSave = () => {
+        resolve(undefined);
+        return undefined;
+      };
+    });
+    mockedListenNativeAppExitRequested.mockImplementation(async (handler) => {
+      appExitHandler = handler;
+      return () => {};
+    });
+    mockedSaveStoredWorkspaceState.mockImplementation(async (patch) => {
+      if (patch.draftTabs?.some((draft) => draft.content === editorMarkdown)) {
+        return workspaceSavePromise;
+      }
+
+      return undefined;
+    });
+    renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: () => editorMarkdown,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    await waitFor(() => expect(mockedListenNativeAppExitRequested).toHaveBeenCalled());
+
+    let exitResolved = false;
+    const registeredAppExitHandler = appExitHandler as (() => unknown | Promise<unknown>) | null;
+    if (!registeredAppExitHandler) throw new Error("native app exit handler was not registered");
+    const exitPromise = Promise.resolve(registeredAppExitHandler()).then(() => {
+      exitResolved = true;
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(exitResolved).toBe(false);
+    expect(mockedExitNativeApp).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveWorkspaceSave();
+      await exitPromise;
+    });
+
     expect(mockedExitNativeApp).toHaveBeenCalledTimes(1);
   });
 
@@ -2921,6 +3025,116 @@ describe("useMarkdownDocument", () => {
       name: "guide.md",
       path: guidePath
     });
+  });
+
+  it("waits for dirty untitled drafts when preparing for an update restart", async () => {
+    const editorMarkdown = "# Scratch\n\nUnsaved restart draft.";
+    let resolveWorkspaceSave!: () => undefined;
+    const workspaceSavePromise = new Promise<undefined>((resolve) => {
+      resolveWorkspaceSave = () => {
+        resolve(undefined);
+        return undefined;
+      };
+    });
+    mockedSaveStoredWorkspaceState.mockImplementation(async (patch) => {
+      if (patch.draftTabs?.some((draft) => draft.content === editorMarkdown)) {
+        return workspaceSavePromise;
+      }
+
+      return undefined;
+    });
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: () => editorMarkdown,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    let prepared = false;
+    let preparePromise!: Promise<unknown>;
+    act(() => {
+      preparePromise = result.current.saveDirtyMarkdownFiles().then(() => {
+        prepared = true;
+      });
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(prepared).toBe(false);
+
+    await act(async () => {
+      resolveWorkspaceSave();
+      await preparePromise;
+    });
+
+    expect(mockedSaveNativeMarkdownFile).not.toHaveBeenCalled();
+    expect(mockedSaveStoredWorkspaceState).toHaveBeenCalledWith({
+      activeDraftId: "untitled:0",
+      draftTabs: [
+        {
+          content: editorMarkdown,
+          id: "untitled:0",
+          name: "Untitled.md",
+          path: null
+        }
+      ]
+    });
+  });
+
+  it("waits for pending draft persistence before preparing for an update restart", async () => {
+    const firstMarkdown = "# Scratch\n\nFirst draft.";
+    const latestMarkdown = "# Scratch\n\nLatest restart draft.";
+    const savedDraftContents: string[] = [];
+    let editorMarkdown = firstMarkdown;
+    let resolveFirstWorkspaceSave!: () => undefined;
+    const firstWorkspaceSavePromise = new Promise<undefined>((resolve) => {
+      resolveFirstWorkspaceSave = () => {
+        resolve(undefined);
+        return undefined;
+      };
+    });
+    mockedSaveStoredWorkspaceState.mockImplementation(async (patch) => {
+      const draftContent = patch.draftTabs?.[0]?.content;
+      if (draftContent) savedDraftContents.push(draftContent);
+      if (draftContent === firstMarkdown) return firstWorkspaceSavePromise;
+
+      return undefined;
+    });
+    const { result } = renderHook(() =>
+      useMarkdownDocument({
+        getCurrentMarkdown: () => editorMarkdown,
+        onTreeRootFromFilePath: vi.fn(),
+        onTreeRootFromFolderPath: vi.fn(),
+        preferencesReady: false,
+        restoreWorkspaceOnStartup: false
+      })
+    );
+
+    act(() => {
+      result.current.handleMarkdownChange(firstMarkdown);
+    });
+    await waitFor(() => expect(savedDraftContents).toEqual([firstMarkdown]));
+
+    editorMarkdown = latestMarkdown;
+    let prepared = false;
+    let preparePromise!: Promise<unknown>;
+    act(() => {
+      preparePromise = result.current.saveDirtyMarkdownFiles().then(() => {
+        prepared = true;
+      });
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(prepared).toBe(false);
+
+    await act(async () => {
+      resolveFirstWorkspaceSave();
+      await preparePromise;
+    });
+
+    expect(savedDraftContents.at(-1)).toBe(latestMarkdown);
   });
 
   it("restores additional editor windows from the saved update-restart snapshot", async () => {
