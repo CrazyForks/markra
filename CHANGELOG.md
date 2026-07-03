@@ -1,3 +1,15 @@
+## [1.0.2](https://github.com/markrahq/markra/compare/v1.0.1...v1.0.2) (2026-07-03)
+
+### Bug Fixes
+
+* **app:** preserve agent and disk edits in editor flows ([#454](https://github.com/markrahq/markra/issues/454)) ([3c177be](https://github.com/markrahq/markra/commit/3c177beeb4ac386891322aee93b72bd009842d05))
+* **editor:** render pasted markdown source as rich content ([#457](https://github.com/markrahq/markra/issues/457)) ([fa6cbca](https://github.com/markrahq/markra/commit/fa6cbcafc2c7410ab28b684ba9761612fef17db5))
+
+### Performance Improvements
+
+* **app:** coalesce native watcher refreshes ([#455](https://github.com/markrahq/markra/issues/455)) ([2d67e8b](https://github.com/markrahq/markra/commit/2d67e8b1f6420d2deb4a566c22bd542537a62881))
+* **app:** reduce file tree loading jank ([#456](https://github.com/markrahq/markra/issues/456)) ([5e7f848](https://github.com/markrahq/markra/commit/5e7f848c823972a57fd93129a0a431d1639bbb60))
+
 ## [1.0.1](https://github.com/markrahq/markra/compare/v1.0.0...v1.0.1) (2026-07-02)
 
 ### Bug Fixes
