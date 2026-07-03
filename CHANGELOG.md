@@ -1,3 +1,13 @@
+## [1.0.3](https://github.com/markrahq/markra/compare/v1.0.2...v1.0.3) (2026-07-03)
+
+### Bug Fixes
+
+* **app:** preserve file tree on refresh failure ([#468](https://github.com/markrahq/markra/issues/468)) ([b5169c8](https://github.com/markrahq/markra/commit/b5169c83f3df140b8820a6ec5a31653e82536a8f))
+* **app:** preserve untitled drafts on update restart ([#460](https://github.com/markrahq/markra/issues/460)) ([62f5c8a](https://github.com/markrahq/markra/commit/62f5c8a32730056db5bc04e646c46b4172bd63a8)), closes [#459](https://github.com/markrahq/markra/issues/459)
+* **desktop:** restore editor tabs on reopen ([#469](https://github.com/markrahq/markra/issues/469)) ([b8c58fd](https://github.com/markrahq/markra/commit/b8c58fda964354aa02ef27256cf6f6a34d9ec0ae))
+* **editor:** copy table cell text as plain text ([#461](https://github.com/markrahq/markra/issues/461)) ([e6f1bad](https://github.com/markrahq/markra/commit/e6f1badd7cbaac01279be9e616d1758c3b2fd738))
+* **editor:** preserve markdown line breaks ([#467](https://github.com/markrahq/markra/issues/467)) ([7c2697e](https://github.com/markrahq/markra/commit/7c2697e01efc7919e7f1026b571c0957c0ad136c))
+
 ## [1.0.2](https://github.com/markrahq/markra/compare/v1.0.1...v1.0.2) (2026-07-03)
 
 ### Bug Fixes
