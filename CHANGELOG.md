@@ -1,3 +1,14 @@
+## [1.1.0](https://github.com/markrahq/markra/compare/v1.0.3...v1.1.0) (2026-07-04)
+
+### Features
+
+* **app:** add configurable pure view mode ([#471](https://github.com/markrahq/markra/issues/471)) ([0b6bc00](https://github.com/markrahq/markra/commit/0b6bc00a866fb47a54676c6c53f9ffda0e36711b))
+* **editor:** show image upload placeholders ([3e38b6f](https://github.com/markrahq/markra/commit/3e38b6f966eace87ad93670281b1d8986fec90cd)), closes [#464](https://github.com/markrahq/markra/issues/464)
+
+### Bug Fixes
+
+* **storage:** repair remote image uploads ([#472](https://github.com/markrahq/markra/issues/472)) ([5655f17](https://github.com/markrahq/markra/commit/5655f1760990d6c6f7374834d4e0eb38c64bb9b2))
+
 ## [1.0.3](https://github.com/markrahq/markra/compare/v1.0.2...v1.0.3) (2026-07-03)
 
 ### Bug Fixes
