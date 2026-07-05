@@ -1,3 +1,13 @@
+## [1.1.1](https://github.com/markrahq/markra/compare/v1.1.0...v1.1.1) (2026-07-05)
+
+### Features
+
+* **app:** add error diagnostics issue reporting ([#473](https://github.com/markrahq/markra/issues/473)) ([3f7d653](https://github.com/markrahq/markra/commit/3f7d6534892f031ba0f12717687ca4439a8b8e65))
+
+### Bug Fixes
+
+* **app:** reduce long markdown editor jank ([#474](https://github.com/markrahq/markra/issues/474)) ([990c9b4](https://github.com/markrahq/markra/commit/990c9b47e2e5994e14217c5fe7d81eeb3ee4ef1d))
+
 ## [1.1.0](https://github.com/markrahq/markra/compare/v1.0.3...v1.1.0) (2026-07-04)
 
 ### Features
