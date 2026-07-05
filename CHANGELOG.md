@@ -1,3 +1,9 @@
+## [1.1.2](https://github.com/markrahq/markra/compare/v1.1.1...v1.1.2) (2026-07-05)
+
+### Bug Fixes
+
+* **editor:** preserve live markdown source serialization ([#475](https://github.com/markrahq/markra/issues/475)) ([2c44e75](https://github.com/markrahq/markra/commit/2c44e7577915b2fb7aaa06d02f19565d0f2249a3))
+
 ## [1.1.1](https://github.com/markrahq/markra/compare/v1.1.0...v1.1.1) (2026-07-05)
 
 ### Features
