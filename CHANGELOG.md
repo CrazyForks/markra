@@ -1,3 +1,11 @@
+## [1.1.3](https://github.com/markrahq/markra/compare/v1.1.2...v1.1.3) (2026-07-06)
+
+### Bug Fixes
+
+* **app:** keep first folder load alive after file root ([#482](https://github.com/markrahq/markra/issues/482)) ([549b55c](https://github.com/markrahq/markra/commit/549b55c26ab01ee0159140e998495e7cd644d65b)), closes [#478](https://github.com/markrahq/markra/issues/478)
+* **desktop:** guard stale Tauri event cleanup ([#480](https://github.com/markrahq/markra/issues/480)) ([9ffcb50](https://github.com/markrahq/markra/commit/9ffcb50bdf1b67d0681f6063da3abd40658d8865))
+* **editor:** keep hr markers literal in task items ([#481](https://github.com/markrahq/markra/issues/481)) ([97c8e77](https://github.com/markrahq/markra/commit/97c8e774faca59c6aa0e5f1a5fc533ac480f096b)), closes [#479](https://github.com/markrahq/markra/issues/479)
+
 ## [1.1.2](https://github.com/markrahq/markra/compare/v1.1.1...v1.1.2) (2026-07-05)
 
 ### Bug Fixes
