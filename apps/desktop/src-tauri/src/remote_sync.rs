@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_MATCH, IF_NONE_MATCH, LAST_MODIFIED};
+use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED};
 use reqwest::{Client, Method, RequestBuilder, Url};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -73,6 +73,12 @@ struct WebDavPropResponse {
     last_modified: Option<String>,
 }
 
+#[derive(Debug)]
+struct WebDavCollectionTarget {
+    relative_path: String,
+    url: Url,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum WebDavFileSyncAction {
     Conflict,
@@ -122,7 +128,7 @@ async fn execute_webdav_sync(request: WebDavSyncRequest) -> Result<WebDavSyncSum
         match action {
             WebDavFileSyncAction::Upload => {
                 let local = local_file
-                    .ok_or_else(|| "Local sync file is missing during upload".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Local", "upload", &relative_path))?;
                 let remote_identity = upload_webdav_file(
                     &client,
                     &request,
@@ -144,7 +150,7 @@ async fn execute_webdav_sync(request: WebDavSyncRequest) -> Result<WebDavSyncSum
             }
             WebDavFileSyncAction::Download => {
                 let remote = remote_file
-                    .ok_or_else(|| "Remote sync file is missing during download".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Remote", "download", &relative_path))?;
                 let hash = download_webdav_file(
                     &client,
                     &request,
@@ -167,13 +173,13 @@ async fn execute_webdav_sync(request: WebDavSyncRequest) -> Result<WebDavSyncSum
             }
             WebDavFileSyncAction::DeleteLocal => {
                 let local = local_file
-                    .ok_or_else(|| "Local sync file is missing during delete".to_string())?;
-                delete_local_sync_file(&local.path, &local.hash)?;
+                    .ok_or_else(|| sync_file_missing_error("Local", "delete", &relative_path))?;
+                delete_local_sync_file(&local.path, &local.hash, &relative_path)?;
                 manifest.entries.remove(&relative_path);
             }
             WebDavFileSyncAction::DeleteRemote => {
                 let remote = remote_file
-                    .ok_or_else(|| "Remote sync file is missing during delete".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Remote", "delete", &relative_path))?;
                 delete_webdav_file(
                     &client,
                     &request,
@@ -186,9 +192,9 @@ async fn execute_webdav_sync(request: WebDavSyncRequest) -> Result<WebDavSyncSum
             }
             WebDavFileSyncAction::Skip => {
                 let local = local_file
-                    .ok_or_else(|| "Local sync file is missing during skip".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Local", "skip", &relative_path))?;
                 let remote = remote_file
-                    .ok_or_else(|| "Remote sync file is missing during skip".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Remote", "skip", &relative_path))?;
                 summary.skipped_files += 1;
                 manifest.entries.insert(
                     relative_path,
@@ -200,15 +206,20 @@ async fn execute_webdav_sync(request: WebDavSyncRequest) -> Result<WebDavSyncSum
             }
             WebDavFileSyncAction::Conflict => {
                 let local = local_file
-                    .ok_or_else(|| "Local sync file is missing during conflict".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Local", "conflict", &relative_path))?;
                 let remote = remote_file
-                    .ok_or_else(|| "Remote sync file is missing during conflict".to_string())?;
+                    .ok_or_else(|| sync_file_missing_error("Remote", "conflict", &relative_path))?;
                 let conflict_path = local.path.with_file_name(remote_conflict_file_name(
                     local
                         .path
                         .file_name()
                         .and_then(|name| name.to_str())
-                        .ok_or_else(|| "Local sync file name is invalid".to_string())?,
+                        .ok_or_else(|| {
+                            format!(
+                                "Local sync file name is invalid: {}",
+                                webdav_diagnostic_relative_path(&relative_path)
+                            )
+                        })?,
                     &timestamp,
                 ));
                 download_webdav_file(
@@ -412,20 +423,24 @@ async fn ensure_webdav_root_collections(
     client: &Client,
     request: &WebDavSyncRequest,
 ) -> Result<(), String> {
-    for collection_url in webdav_collection_urls(&request.server_url, &request.remote_path)? {
+    for target in webdav_collection_targets(&request.server_url, &request.remote_path)? {
         let response = apply_basic_auth(
-            client.request(webdav_mkcol_method()?, collection_url),
+            client.request(webdav_mkcol_method()?, target.url),
             &request.username,
             &request.password,
         )
         .send()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            webdav_request_error("folder creation", "MKCOL", &target.relative_path, error)
+        })?;
 
         if !(response.status().is_success() || response.status().as_u16() == 405) {
-            return Err(format!(
-                "WebDAV sync folder could not be created: HTTP {}",
-                response.status().as_u16()
+            return Err(webdav_status_error(
+                "folder creation",
+                "MKCOL",
+                &target.relative_path,
+                response.status().as_u16(),
             ));
         }
     }
@@ -433,19 +448,21 @@ async fn ensure_webdav_root_collections(
     Ok(())
 }
 
-fn webdav_collection_urls(server_url: &str, remote_path: &str) -> Result<Vec<Url>, String> {
+fn webdav_collection_targets(
+    server_url: &str,
+    remote_path: &str,
+) -> Result<Vec<WebDavCollectionTarget>, String> {
     let segments = normalize_remote_path_segments(remote_path)?;
-    let mut urls = Vec::with_capacity(segments.len());
+    let mut targets = Vec::with_capacity(segments.len());
 
     for index in 0..segments.len() {
-        urls.push(webdav_url_with_segments(
-            server_url,
-            &segments[..=index],
-            true,
-        )?);
+        targets.push(WebDavCollectionTarget {
+            relative_path: segments[..=index].join("/"),
+            url: webdav_url_with_segments(server_url, &segments[..=index], true)?,
+        });
     }
 
-    Ok(urls)
+    Ok(targets)
 }
 
 fn webdav_url_with_segments(
@@ -476,19 +493,24 @@ async fn list_webdav_remote_files(
     root_url: &Url,
 ) -> Result<BTreeMap<String, RemoteSyncFile>, String> {
     let mut files = BTreeMap::new();
-    let mut directories = vec![root_url.clone()];
+    let mut directories = vec![(root_url.clone(), String::new())];
 
-    while let Some(directory_url) = directories.pop() {
-        let responses = propfind_webdav_directory(client, request, &directory_url).await?;
+    while let Some((directory_url, directory_path)) = directories.pop() {
+        let responses =
+            propfind_webdav_directory(client, request, &directory_url, &directory_path).await?;
 
         for response in responses {
             if response.href.trim().is_empty() {
                 continue;
             }
-            let Some(relative_path) = remote_relative_path(root_url, &response.href)? else {
+            let Some(relative_path) =
+                remote_relative_path(root_url, &response.href).map_err(|error| {
+                    webdav_request_error("listing", "PROPFIND depth=1", &directory_path, error)
+                })?
+            else {
                 continue;
             };
-            if relative_path.is_empty() {
+            if should_skip_webdav_listing_path(&relative_path, &directory_path) {
                 continue;
             }
             if relative_path
@@ -499,7 +521,12 @@ async fn list_webdav_remote_files(
             }
 
             if response.is_collection {
-                directories.push(webdav_child_url(root_url, &relative_path, true)?);
+                directories.push((
+                    webdav_child_url(root_url, &relative_path, true).map_err(|error| {
+                        webdav_request_error("listing", "PROPFIND depth=1", &relative_path, error)
+                    })?,
+                    relative_path.clone(),
+                ));
             } else {
                 let size = response.content_length.unwrap_or(0);
                 files.insert(
@@ -520,10 +547,15 @@ async fn list_webdav_remote_files(
     Ok(files)
 }
 
+fn should_skip_webdav_listing_path(relative_path: &str, directory_path: &str) -> bool {
+    relative_path.is_empty() || relative_path == directory_path
+}
+
 async fn propfind_webdav_directory(
     client: &Client,
     request: &WebDavSyncRequest,
     directory_url: &Url,
+    relative_path: &str,
 ) -> Result<Vec<WebDavPropResponse>, String> {
     let response = apply_basic_auth(
         client
@@ -546,18 +578,23 @@ async fn propfind_webdav_directory(
     )
     .send()
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| webdav_request_error("listing", "PROPFIND depth=1", relative_path, error))?;
 
     if !(response.status().is_success() || response.status().as_u16() == 207) {
-        return Err(format!(
-            "WebDAV sync listing failed: HTTP {}",
-            response.status().as_u16()
+        return Err(webdav_status_error(
+            "listing",
+            "PROPFIND depth=1",
+            relative_path,
+            response.status().as_u16(),
         ));
     }
 
-    let body = response.text().await.map_err(|error| error.to_string())?;
+    let body = response.text().await.map_err(|error| {
+        webdav_request_error("listing", "PROPFIND depth=1", relative_path, error)
+    })?;
 
     parse_webdav_propfind_response(&body)
+        .map_err(|error| webdav_request_error("listing", "PROPFIND depth=1", relative_path, error))
 }
 
 fn parse_webdav_propfind_response(body: &str) -> Result<Vec<WebDavPropResponse>, String> {
@@ -740,7 +777,10 @@ async fn ensure_webdav_parent_collections(
 
     for index in 0..parent_segments.len() {
         let collection_path = parent_segments[..=index].join("/");
-        let collection_url = webdav_child_url(root_url, &collection_path, true)?;
+        let collection_url =
+            webdav_child_url(root_url, &collection_path, true).map_err(|error| {
+                webdav_request_error("folder creation", "MKCOL", &collection_path, error)
+            })?;
         let response = apply_basic_auth(
             client.request(webdav_mkcol_method()?, collection_url),
             &request.username,
@@ -748,12 +788,16 @@ async fn ensure_webdav_parent_collections(
         )
         .send()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            webdav_request_error("folder creation", "MKCOL", &collection_path, error)
+        })?;
 
         if !(response.status().is_success() || response.status().as_u16() == 405) {
-            return Err(format!(
-                "WebDAV sync folder could not be created: HTTP {}",
-                response.status().as_u16()
+            return Err(webdav_status_error(
+                "folder creation",
+                "MKCOL",
+                &collection_path,
+                response.status().as_u16(),
             ));
         }
     }
@@ -770,12 +814,21 @@ async fn upload_webdav_file(
     expected_remote_identity: Option<&str>,
 ) -> Result<String, String> {
     ensure_webdav_parent_collections(client, request, root_url, relative_path).await?;
-    let file_url = webdav_child_url(root_url, relative_path, false)?;
-    let bytes = fs::read(&local_file.path).map_err(|error| error.to_string())?;
+    let file_url = webdav_child_url(root_url, relative_path, false)
+        .map_err(|error| webdav_request_error("upload", "PUT", relative_path, error))?;
+    let bytes = fs::read(&local_file.path)
+        .map_err(|error| local_sync_file_error("read", relative_path, error))?;
     if sha256_hex(&bytes) != local_file.hash {
-        return Err("Local sync file changed during sync".to_string());
+        return Err(sync_file_changed_error("Local", relative_path));
     }
-    ensure_remote_sync_identity(client, request, &file_url, expected_remote_identity).await?;
+    ensure_remote_sync_identity(
+        client,
+        request,
+        relative_path,
+        &file_url,
+        expected_remote_identity,
+    )
+    .await?;
     let response = apply_basic_auth(
         apply_webdav_remote_precondition(
             client
@@ -789,12 +842,14 @@ async fn upload_webdav_file(
     )
     .send()
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| webdav_request_error("upload", "PUT", relative_path, error))?;
 
     if !response.status().is_success() {
-        return Err(format!(
-            "WebDAV sync upload failed: HTTP {}",
-            response.status().as_u16()
+        return Err(webdav_status_error(
+            "upload",
+            "PUT",
+            relative_path,
+            response.status().as_u16(),
         ));
     }
 
@@ -807,7 +862,7 @@ async fn upload_webdav_file(
         return Ok(remote_identity(Some(etag), None, local_file.size));
     }
 
-    webdav_file_identity(client, request, &file_url, local_file.size)
+    webdav_file_identity(client, request, relative_path, &file_url, local_file.size)
         .await
         .or_else(|_| Ok(format!("sha256:{}", local_file.hash)))
 }
@@ -819,33 +874,41 @@ async fn delete_webdav_file(
     relative_path: &str,
     expected_remote_identity: &str,
 ) -> Result<(), String> {
-    let file_url = webdav_child_url(root_url, relative_path, false)?;
-    ensure_remote_sync_identity(client, request, &file_url, Some(expected_remote_identity)).await?;
+    let file_url = webdav_child_url(root_url, relative_path, false)
+        .map_err(|error| webdav_request_error("delete", "DELETE", relative_path, error))?;
+    ensure_remote_sync_identity(
+        client,
+        request,
+        relative_path,
+        &file_url,
+        Some(expected_remote_identity),
+    )
+    .await?;
     let response = apply_basic_auth(
-        apply_webdav_match_precondition(
-            client.request(webdav_delete_method()?, file_url),
-            expected_remote_identity,
-        ),
+        client.request(webdav_delete_method()?, file_url),
         &request.username,
         &request.password,
     )
     .send()
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| webdav_request_error("delete", "DELETE", relative_path, error))?;
 
     if response.status().is_success() || response.status().as_u16() == 404 {
         return Ok(());
     }
 
-    Err(format!(
-        "WebDAV sync delete failed: HTTP {}",
-        response.status().as_u16()
+    Err(webdav_status_error(
+        "delete",
+        "DELETE",
+        relative_path,
+        response.status().as_u16(),
     ))
 }
 
 async fn webdav_file_identity(
     client: &Client,
     request: &WebDavSyncRequest,
+    relative_path: &str,
     file_url: &Url,
     fallback_size: u64,
 ) -> Result<String, String> {
@@ -856,12 +919,14 @@ async fn webdav_file_identity(
     )
     .send()
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| webdav_request_error("metadata", "HEAD", relative_path, error))?;
 
     if !response.status().is_success() {
-        return Err(format!(
-            "WebDAV sync metadata failed: HTTP {}",
-            response.status().as_u16()
+        return Err(webdav_status_error(
+            "metadata",
+            "HEAD",
+            relative_path,
+            response.status().as_u16(),
         ));
     }
 
@@ -886,6 +951,7 @@ async fn webdav_file_identity(
 async fn webdav_file_identity_optional(
     client: &Client,
     request: &WebDavSyncRequest,
+    relative_path: &str,
     file_url: &Url,
 ) -> Result<Option<String>, String> {
     let response = apply_basic_auth(
@@ -909,21 +975,27 @@ async fn webdav_file_identity_optional(
     )
     .send()
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| webdav_request_error("metadata", "PROPFIND depth=0", relative_path, error))?;
 
     if response.status().as_u16() == 404 {
         return Ok(None);
     }
 
     if !(response.status().is_success() || response.status().as_u16() == 207) {
-        return Err(format!(
-            "WebDAV sync metadata failed: HTTP {}",
-            response.status().as_u16()
+        return Err(webdav_status_error(
+            "metadata",
+            "PROPFIND depth=0",
+            relative_path,
+            response.status().as_u16(),
         ));
     }
 
-    let body = response.text().await.map_err(|error| error.to_string())?;
-    let responses = parse_webdav_propfind_response(&body)?;
+    let body = response.text().await.map_err(|error| {
+        webdav_request_error("metadata", "PROPFIND depth=0", relative_path, error)
+    })?;
+    let responses = parse_webdav_propfind_response(&body).map_err(|error| {
+        webdav_request_error("metadata", "PROPFIND depth=0", relative_path, error)
+    })?;
     let Some(response) = responses
         .into_iter()
         .find(|response| !response.is_collection)
@@ -941,15 +1013,17 @@ async fn webdav_file_identity_optional(
 async fn ensure_remote_sync_identity(
     client: &Client,
     request: &WebDavSyncRequest,
+    relative_path: &str,
     file_url: &Url,
     expected_identity: Option<&str>,
 ) -> Result<(), String> {
-    let actual_identity = webdav_file_identity_optional(client, request, file_url).await?;
-    if actual_identity.as_deref() == expected_identity {
+    let actual_identity =
+        webdav_file_identity_optional(client, request, relative_path, file_url).await?;
+    if same_optional_remote_identity(actual_identity.as_deref(), expected_identity) {
         return Ok(());
     }
 
-    Err("Remote sync file changed during sync".to_string())
+    Err(sync_file_changed_error("Remote", relative_path))
 }
 
 async fn download_webdav_file(
@@ -961,55 +1035,78 @@ async fn download_webdav_file(
     expected_local_hash: Option<&str>,
     expected_remote_identity: &str,
 ) -> Result<String, String> {
-    let file_url = webdav_child_url(root_url, relative_path, false)?;
-    ensure_remote_sync_identity(client, request, &file_url, Some(expected_remote_identity)).await?;
-    let response = apply_basic_auth(
-        apply_webdav_match_precondition(client.get(file_url), expected_remote_identity),
-        &request.username,
-        &request.password,
+    let file_url = webdav_child_url(root_url, relative_path, false)
+        .map_err(|error| webdav_request_error("download", "GET", relative_path, error))?;
+    ensure_remote_sync_identity(
+        client,
+        request,
+        relative_path,
+        &file_url,
+        Some(expected_remote_identity),
     )
-    .send()
-    .await
-    .map_err(|error| error.to_string())?;
+    .await?;
+    let response = apply_basic_auth(client.get(file_url), &request.username, &request.password)
+        .send()
+        .await
+        .map_err(|error| webdav_request_error("download", "GET", relative_path, error))?;
 
     if !response.status().is_success() {
-        return Err(format!(
-            "WebDAV sync download failed: HTTP {}",
-            response.status().as_u16()
+        return Err(webdav_status_error(
+            "download",
+            "GET",
+            relative_path,
+            response.status().as_u16(),
         ));
     }
 
-    let bytes = response.bytes().await.map_err(|error| error.to_string())?;
-    ensure_local_sync_identity(target_path, expected_local_hash)?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| webdav_request_error("download", "GET", relative_path, error))?;
+    ensure_local_sync_identity(target_path, expected_local_hash, relative_path)?;
     if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| local_sync_file_error("folder creation", relative_path, error))?;
     }
-    fs::write(target_path, &bytes).map_err(|error| error.to_string())?;
+    fs::write(target_path, &bytes)
+        .map_err(|error| local_sync_file_error("write", relative_path, error))?;
 
     Ok(sha256_hex(&bytes))
 }
 
-fn ensure_local_sync_identity(path: &Path, expected_hash: Option<&str>) -> Result<(), String> {
+fn ensure_local_sync_identity(
+    path: &Path,
+    expected_hash: Option<&str>,
+    relative_path: &str,
+) -> Result<(), String> {
     match expected_hash {
         Some(expected_hash) => {
-            let bytes = fs::read(path).map_err(|error| error.to_string())?;
+            let bytes = fs::read(path)
+                .map_err(|error| local_sync_file_error("read", relative_path, error))?;
             if sha256_hex(&bytes) == expected_hash {
                 return Ok(());
             }
         }
         None => {
-            if !path.try_exists().map_err(|error| error.to_string())? {
+            if !path
+                .try_exists()
+                .map_err(|error| local_sync_file_error("stat", relative_path, error))?
+            {
                 return Ok(());
             }
         }
     }
 
-    Err("Local sync file changed during sync".to_string())
+    Err(sync_file_changed_error("Local", relative_path))
 }
 
-fn delete_local_sync_file(path: &Path, expected_hash: &str) -> Result<(), String> {
-    ensure_local_sync_identity(path, Some(expected_hash))?;
-    fs::remove_file(path).map_err(|error| error.to_string())
+fn delete_local_sync_file(
+    path: &Path,
+    expected_hash: &str,
+    relative_path: &str,
+) -> Result<(), String> {
+    ensure_local_sync_identity(path, Some(expected_hash), relative_path)?;
+    fs::remove_file(path).map_err(|error| local_sync_file_error("delete", relative_path, error))
 }
 
 fn plan_webdav_file_sync(
@@ -1032,7 +1129,7 @@ fn plan_webdav_file_sync(
             let Some(manifest) = manifest else {
                 return WebDavFileSyncAction::Download;
             };
-            if remote == manifest.remote_etag {
+            if same_remote_identity(remote, &manifest.remote_etag) {
                 WebDavFileSyncAction::DeleteRemote
             } else {
                 WebDavFileSyncAction::Download
@@ -1044,7 +1141,7 @@ fn plan_webdav_file_sync(
                 return WebDavFileSyncAction::Conflict;
             };
             let local_changed = local != manifest.local_hash;
-            let remote_changed = remote != manifest.remote_etag;
+            let remote_changed = !same_remote_identity(remote, &manifest.remote_etag);
 
             match (local_changed, remote_changed) {
                 (false, false) => WebDavFileSyncAction::Skip,
@@ -1075,40 +1172,109 @@ fn apply_webdav_remote_precondition(
     builder: RequestBuilder,
     expected_remote_identity: Option<&str>,
 ) -> RequestBuilder {
-    let Some(expected_remote_identity) = expected_remote_identity else {
+    if expected_remote_identity.is_none() {
         return builder.header(IF_NONE_MATCH, "*");
-    };
-
-    apply_webdav_match_precondition(builder, expected_remote_identity)
-}
-
-fn apply_webdav_match_precondition(
-    builder: RequestBuilder,
-    expected_remote_identity: &str,
-) -> RequestBuilder {
-    if let Some(etag) = webdav_etag_precondition(expected_remote_identity) {
-        return builder.header(IF_MATCH, etag);
     }
 
+    // Some WebDAV servers expose weak/strong ETag variants across methods, so rely on the explicit identity probe above.
     builder
 }
 
-fn webdav_etag_precondition(identity: &str) -> Option<&str> {
+fn webdav_status_error(action: &str, method: &str, relative_path: &str, status: u16) -> String {
+    format!(
+        "WebDAV sync {action} failed: {method} {}: HTTP {status}",
+        webdav_diagnostic_relative_path(relative_path)
+    )
+}
+
+fn webdav_request_error(
+    action: &str,
+    method: &str,
+    relative_path: &str,
+    error: impl std::fmt::Display,
+) -> String {
+    format!(
+        "WebDAV sync {action} failed: {method} {}: {error}",
+        webdav_diagnostic_relative_path(relative_path)
+    )
+}
+
+fn sync_file_changed_error(side: &str, relative_path: &str) -> String {
+    format!(
+        "{side} sync file changed during sync: {}",
+        webdav_diagnostic_relative_path(relative_path)
+    )
+}
+
+fn sync_file_missing_error(side: &str, action: &str, relative_path: &str) -> String {
+    format!(
+        "{side} sync file is missing during {action}: {}",
+        webdav_diagnostic_relative_path(relative_path)
+    )
+}
+
+fn local_sync_file_error(
+    action: &str,
+    relative_path: &str,
+    error: impl std::fmt::Display,
+) -> String {
+    format!(
+        "Local sync file {action} failed: {}: {error}",
+        webdav_diagnostic_relative_path(relative_path)
+    )
+}
+
+fn webdav_diagnostic_relative_path(relative_path: &str) -> String {
+    let normalized = relative_path
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let normalized = normalized.trim();
+
+    if normalized.is_empty() {
+        "<root>".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+fn same_optional_remote_identity(actual: Option<&str>, expected: Option<&str>) -> bool {
+    match (actual, expected) {
+        (Some(actual), Some(expected)) => same_remote_identity(actual, expected),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn same_remote_identity(left: &str, right: &str) -> bool {
+    canonical_webdav_etag_identity(left) == canonical_webdav_etag_identity(right)
+}
+
+fn canonical_webdav_etag_identity(identity: &str) -> &str {
     let trimmed = identity.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with("modified:")
-        || trimmed.starts_with("len:")
-        || trimmed.starts_with("sha256:")
-    {
-        return None;
+    let weak_value = trimmed
+        .strip_prefix("W/")
+        .or_else(|| trimmed.strip_prefix("w/"));
+
+    if let Some(value) = weak_value {
+        let value = value.trim_start();
+        if value.starts_with('"') {
+            return value;
+        }
     }
 
-    Some(trimmed)
+    trimmed
 }
 
 fn remote_identity(etag: Option<&str>, last_modified: Option<&str>, size: u64) -> String {
     if let Some(etag) = etag.map(str::trim).filter(|value| !value.is_empty()) {
-        return etag.to_string();
+        return canonical_webdav_etag_identity(etag).to_string();
     }
 
     if let Some(last_modified) = last_modified
@@ -1384,10 +1550,11 @@ mod tests {
         let target = root.join("draft.md");
         write_test_file(&target, "current contents");
 
-        let error = ensure_local_sync_identity(&target, Some(&sha256_hex(b"old contents")))
-            .expect_err("changed local file should be rejected");
+        let error =
+            ensure_local_sync_identity(&target, Some(&sha256_hex(b"old contents")), "draft.md")
+                .expect_err("changed local file should be rejected");
 
-        assert!(error.contains("Local sync file changed during sync"));
+        assert_eq!(error, "Local sync file changed during sync: draft.md");
     }
 
     #[test]
@@ -1396,6 +1563,116 @@ mod tests {
             remote_identity(None, Some("Sun, 07 Jun 2026 02:00:00 GMT"), 128),
             "modified:Sun, 07 Jun 2026 02:00:00 GMT;len:128"
         );
+    }
+
+    #[test]
+    fn normalizes_webdav_weak_etags_for_remote_identity() {
+        assert_eq!(
+            remote_identity(Some(" W/\"8-656032d37efc2\" "), None, 8),
+            "\"8-656032d37efc2\""
+        );
+    }
+
+    #[test]
+    fn treats_weak_and_strong_webdav_etag_variants_as_same_remote_identity() {
+        let action = plan_webdav_file_sync(
+            Some("local-old"),
+            Some("\"8-656032d37efc2\""),
+            Some(&SyncManifestEntry {
+                local_hash: "local-old".to_string(),
+                remote_etag: "W/\"8-656032d37efc2\"".to_string(),
+            }),
+        );
+
+        assert_eq!(action, WebDavFileSyncAction::Skip);
+    }
+
+    #[test]
+    fn omits_webdav_if_match_after_explicit_remote_identity_check() {
+        let client = Client::new();
+        let request = apply_webdav_remote_precondition(
+            client
+                .put("https://dav.example.test/base/draft.md")
+                .body("hello"),
+            Some("\"8-656032d37efc2\""),
+        )
+        .build()
+        .expect("request should be built");
+
+        assert!(request.headers().get("if-match").is_none());
+    }
+
+    #[test]
+    fn formats_webdav_http_errors_with_request_context() {
+        assert_eq!(
+            webdav_status_error("folder creation", "MKCOL", "notes", 409),
+            "WebDAV sync folder creation failed: MKCOL notes: HTTP 409"
+        );
+        assert_eq!(
+            webdav_status_error("listing", "PROPFIND depth=1", "", 400),
+            "WebDAV sync listing failed: PROPFIND depth=1 <root>: HTTP 400"
+        );
+        assert_eq!(
+            webdav_status_error("metadata", "PROPFIND depth=0", "notes/draft.md", 400),
+            "WebDAV sync metadata failed: PROPFIND depth=0 notes/draft.md: HTTP 400"
+        );
+        assert_eq!(
+            webdav_status_error("metadata", "HEAD", "folder/image.png", 405),
+            "WebDAV sync metadata failed: HEAD folder/image.png: HTTP 405"
+        );
+        assert_eq!(
+            webdav_status_error("upload", "PUT", "folder/image.png", 507),
+            "WebDAV sync upload failed: PUT folder/image.png: HTTP 507"
+        );
+        assert_eq!(
+            webdav_status_error("download", "GET", "folder/image.png", 503),
+            "WebDAV sync download failed: GET folder/image.png: HTTP 503"
+        );
+        assert_eq!(
+            webdav_status_error("delete", "DELETE", "folder/image.png", 423),
+            "WebDAV sync delete failed: DELETE folder/image.png: HTTP 423"
+        );
+    }
+
+    #[test]
+    fn formats_webdav_transport_and_file_guard_errors_with_context() {
+        assert_eq!(
+            webdav_request_error(
+                "listing",
+                "PROPFIND depth=1",
+                "folder\nbad",
+                "mock transport"
+            ),
+            "WebDAV sync listing failed: PROPFIND depth=1 folder bad: mock transport"
+        );
+        assert_eq!(
+            sync_file_changed_error("Remote", "notes/draft.md"),
+            "Remote sync file changed during sync: notes/draft.md"
+        );
+        assert_eq!(
+            sync_file_changed_error("Local", ""),
+            "Local sync file changed during sync: <root>"
+        );
+    }
+
+    #[test]
+    fn builds_webdav_collection_targets_with_diagnostic_paths() {
+        let targets = webdav_collection_targets("https://dav.example.test/base/", "notes/2026")
+            .expect("collection targets should be built");
+        let diagnostic_paths = targets
+            .iter()
+            .map(|target| target.relative_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(diagnostic_paths, vec!["notes", "notes/2026"]);
+    }
+
+    #[test]
+    fn skips_current_collection_href_when_listing_nested_webdav_directory() {
+        assert!(should_skip_webdav_listing_path("", ""));
+        assert!(should_skip_webdav_listing_path("notes", "notes"));
+        assert!(!should_skip_webdav_listing_path("notes/draft.md", "notes"));
+        assert!(!should_skip_webdav_listing_path("notes/child", "notes"));
     }
 
     #[test]
