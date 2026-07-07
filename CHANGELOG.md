@@ -1,3 +1,13 @@
+## [1.2.0](https://github.com/markrahq/markra/compare/v1.1.3...v1.2.0) (2026-07-07)
+
+### Features
+
+* **app:** add runtime diagnostics logging ([#483](https://github.com/markrahq/markra/issues/483)) ([a504fcb](https://github.com/markrahq/markra/commit/a504fcb329e035fc6eab3fc6f993b7e8b3da76e4))
+
+### Bug Fixes
+
+* **app:** unclip Windows view mode menu ([#484](https://github.com/markrahq/markra/issues/484)) ([b8aba99](https://github.com/markrahq/markra/commit/b8aba99b9abf383b21a7ed5771210865dd6efbc4))
+
 ## [1.1.3](https://github.com/markrahq/markra/compare/v1.1.2...v1.1.3) (2026-07-06)
 
 ### Bug Fixes
