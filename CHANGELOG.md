@@ -1,3 +1,11 @@
+## [1.2.2](https://github.com/markrahq/markra/compare/v1.2.1...v1.2.2) (2026-07-07)
+
+### Bug Fixes
+
+* **desktop:** avoid stale drag drop listener errors ([#493](https://github.com/markrahq/markra/issues/493)) ([01506d2](https://github.com/markrahq/markra/commit/01506d2ab33ec54513543b8620b2ec69f52c21ff)), closes [#485](https://github.com/markrahq/markra/issues/485)
+* **editor:** preserve identifier underscores in markdown source ([#491](https://github.com/markrahq/markra/issues/491)) ([b327edd](https://github.com/markrahq/markra/commit/b327edd6a20bb028728f1a7eb84296c77dac519c))
+* **editor:** synthesize live markdown italic style ([#494](https://github.com/markrahq/markra/issues/494)) ([f059190](https://github.com/markrahq/markra/commit/f059190ede79d7bf31b496bc3ced4beab1761039))
+
 ## [1.2.1](https://github.com/markrahq/markra/compare/v1.2.0...v1.2.1) (2026-07-07)
 
 ### Features
