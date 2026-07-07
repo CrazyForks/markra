@@ -1,3 +1,15 @@
+## [1.2.1](https://github.com/markrahq/markra/compare/v1.2.0...v1.2.1) (2026-07-07)
+
+### Features
+
+* **app:** prompt before installing updates ([#490](https://github.com/markrahq/markra/issues/490)) ([1b17fe4](https://github.com/markrahq/markra/commit/1b17fe4b18f10f74c1d9135fafffda127e987248))
+
+### Bug Fixes
+
+* **app:** avoid duplicate Windows selection highlights ([#489](https://github.com/markrahq/markra/issues/489)) ([073f0b4](https://github.com/markrahq/markra/commit/073f0b483f85ec1c0406f3ceed304b6b1c65f943))
+* **app:** keep full selections visibly highlighted ([#488](https://github.com/markrahq/markra/issues/488)) ([ab0200f](https://github.com/markrahq/markra/commit/ab0200f8a633113da1ff6c99ce2733e9d9628d26))
+* **app:** keep selection toolbar inside viewport ([#486](https://github.com/markrahq/markra/issues/486)) ([de9508c](https://github.com/markrahq/markra/commit/de9508cc139d6b530880a46f973147fff1134914))
+
 ## [1.2.0](https://github.com/markrahq/markra/compare/v1.1.3...v1.2.0) (2026-07-07)
 
 ### Features
