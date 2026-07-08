@@ -1,3 +1,9 @@
+## [1.2.4](https://github.com/markrahq/markra/compare/v1.2.3...v1.2.4) (2026-07-08)
+
+### Bug Fixes
+
+* **app:** show full selection without selection helpers ([#497](https://github.com/markrahq/markra/issues/497)) ([962f4f3](https://github.com/markrahq/markra/commit/962f4f30d0f62c98658351d44de824dfc932e76d))
+
 ## [1.2.3](https://github.com/markrahq/markra/compare/v1.2.2...v1.2.3) (2026-07-08)
 
 ### Features
