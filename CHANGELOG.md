@@ -1,3 +1,9 @@
+## [1.2.3](https://github.com/markrahq/markra/compare/v1.2.2...v1.2.3) (2026-07-08)
+
+### Features
+
+* **diagnostics:** add robust desktop logging ([#496](https://github.com/markrahq/markra/issues/496)) ([69f434d](https://github.com/markrahq/markra/commit/69f434d2ab0ef52d857a4d064aff9d3dd86b3e17))
+
 ## [1.2.2](https://github.com/markrahq/markra/compare/v1.2.1...v1.2.2) (2026-07-07)
 
 ### Bug Fixes
