@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/markrahq/markra/compare/v1.2.5...v1.3.0) (2026-07-09)
+
+### Features
+
+* **release:** add Homebrew cask publishing ([#502](https://github.com/markrahq/markra/issues/502)) ([918fac4](https://github.com/markrahq/markra/commit/918fac4de3730331de371eeb26dc2047b02b23c4))
+
 ## [1.2.5](https://github.com/markrahq/markra/compare/v1.2.4...v1.2.5) (2026-07-09)
 
 ### Features
