@@ -1,3 +1,14 @@
+## [1.2.5](https://github.com/markrahq/markra/compare/v1.2.4...v1.2.5) (2026-07-09)
+
+### Features
+
+* **update:** surface available version in settings ([#498](https://github.com/markrahq/markra/issues/498)) ([8b0dce0](https://github.com/markrahq/markra/commit/8b0dce0c962e100269f79d04cb0ba78b82613196))
+
+### Bug Fixes
+
+* **app:** avoid dirty prompts for equivalent markdown ([#499](https://github.com/markrahq/markra/issues/499)) ([b7c9e92](https://github.com/markrahq/markra/commit/b7c9e928b87142c921b6466d606fca4e30bf7566))
+* **app:** track clean visual markdown baselines ([#500](https://github.com/markrahq/markra/issues/500)) ([4830ba3](https://github.com/markrahq/markra/commit/4830ba302516c0fd65bba58169dd2c045fa1a819))
+
 ## [1.2.4](https://github.com/markrahq/markra/compare/v1.2.3...v1.2.4) (2026-07-08)
 
 ### Bug Fixes
