@@ -174,6 +174,69 @@ exit 1
   assert.match(fs.readFileSync(gitLogPath, "utf8"), /init -b main/);
 });
 
+test("release workflow publishes the Homebrew tap with token authentication", () => {
+  const rootDir = makeTempDir();
+  const binDir = path.join(rootDir, "bin");
+  const gitLogPath = path.join(rootDir, "git.log");
+  const scriptPath = path.join(rootDir, "publish-homebrew-cask.sh");
+  const fakeGitPath = path.join(binDir, "git");
+
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(path.join(rootDir, "generated", "homebrew", "Casks"), { recursive: true });
+  fs.mkdirSync(path.join(rootDir, "homebrew-tap", ".git"), { recursive: true });
+  fs.writeFileSync(path.join(rootDir, "generated", "homebrew", "Casks", "markra.rb"), "cask");
+  fs.writeFileSync(scriptPath, extractWorkflowRunScript("Publish Homebrew cask to tap"));
+  fs.writeFileSync(
+    fakeGitPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "${gitLogPath}"
+
+args=("$@")
+if [[ "\${args[0]}" == "-C" ]]; then
+  args=("\${args[@]:2}")
+fi
+if [[ "\${args[0]}" == "-c" ]]; then
+  args=("\${args[@]:2}")
+fi
+
+case "\${args[0]}" in
+  status)
+    printf ' M Casks/markra.rb\\n'
+    ;;
+  config|add|commit)
+    ;;
+  push)
+    if [[ "\${args[*]}" != *"https://x-access-token:synthetic-token@github.com/markrahq/homebrew-tap.git"* ]]; then
+      printf 'missing authenticated tap push URL: %s\\n' "$*" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    printf 'unexpected git call: %s\\n' "$*" >&2
+    exit 1
+    ;;
+esac
+`,
+  );
+  fs.chmodSync(fakeGitPath, 0o755);
+
+  const result = spawnSync("bash", [scriptPath], {
+    cwd: rootDir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      HOMEBREW_TAP_BRANCH: "main",
+      HOMEBREW_TAP_TOKEN: "synthetic-token",
+      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      RELEASE_TAG: "v1.3.0",
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(fs.readFileSync(gitLogPath, "utf8"), /push -u https:\/\/x-access-token:synthetic-token@github\.com\/markrahq\/homebrew-tap\.git HEAD:main/);
+});
+
 test("release workflow generates and publishes the Homebrew cask separately from release assets", () => {
   const workflow = fs.readFileSync(releaseWorkflowPath, "utf8");
 
@@ -189,6 +252,6 @@ test("release workflow generates and publishes the Homebrew cask separately from
   assert.match(workflow, /Publish Homebrew cask to tap/);
   assert.match(workflow, /HOMEBREW_TAP_TOKEN/);
   assert.match(workflow, /tap_url="https:\/\/github\.com\/markrahq\/homebrew-tap\.git"/);
-  assert.match(workflow, /git -C homebrew-tap -c http\.extraheader="AUTHORIZATION: bearer \$\{HOMEBREW_TAP_TOKEN\}" push -u origin "HEAD:\$\{tap_branch\}"/);
+  assert.match(workflow, /git -C homebrew-tap push -u "https:\/\/x-access-token:\$\{HOMEBREW_TAP_TOKEN\}@github\.com\/markrahq\/homebrew-tap\.git" "HEAD:\$\{tap_branch\}"/);
   assert.match(workflow, /git -C homebrew-tap status --porcelain -- Casks\/markra\.rb/);
 });

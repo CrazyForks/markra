@@ -649,4 +649,4 @@ jobs:
           git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C homebrew-tap add Casks/markra.rb
           git -C homebrew-tap commit -m "Update Markra cask to ${RELEASE_TAG}"
-          git -C homebrew-tap -c http.extraheader="AUTHORIZATION: bearer ${HOMEBREW_TAP_TOKEN}" push -u origin "HEAD:${tap_branch}"
+          git -C homebrew-tap push -u "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/markrahq/homebrew-tap.git" "HEAD:${tap_branch}"
