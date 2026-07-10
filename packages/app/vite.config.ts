@@ -8,6 +8,12 @@ const appPackage = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8")
 ) as { version?: string };
 const browserNodeStubPath = fileURLToPath(new URL("./src/lib/browser-node-stub.ts", import.meta.url));
+const localTestWorkerConfig = process.env.CI
+  ? {}
+  : {
+      maxWorkers: "67%" as const,
+      pool: "threads" as const
+    };
 
 export default defineConfig(({ mode }) => ({
   define: {
@@ -28,6 +34,7 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: "jsdom",
     globals: true,
+    ...localTestWorkerConfig,
     setupFiles: "./src/test/setup.ts"
   }
 }));
