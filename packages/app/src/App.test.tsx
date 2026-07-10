@@ -4,6 +4,7 @@ import { Editor as MilkdownEditor, editorViewCtx } from "@milkdown/kit/core";
 import { AllSelection, TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView as ProseMirrorEditorView } from "@milkdown/kit/prose/view";
 import { defaultMarkdownShortcuts } from "@markra/editor";
+import { it as registerTest } from "vitest";
 import desktopPackage from "../package.json";
 import { defaultAiQuickActionPrompts } from "./lib/ai-actions";
 import {
@@ -112,8 +113,12 @@ import {
 import type { NativeMenuHandlers } from "./test/app-harness";
 import { configureAppRuntime, createDefaultAppRuntime, resetAppRuntimeForTests } from "./runtime";
 import { showAppToast } from "./lib/app-toast";
+import { createShardedTest } from "./test/shard";
 
 installAppTestHarness();
+
+// Vitest shards files only, so CI needs a local registration boundary to split this monolithic suite by test title.
+const it = createShardedTest(registerTest, process.env.MARKRA_APP_TEST_SHARD);
 
 const defaultFileTreeListOptions = { managedAttachmentFolder: "assets" };
 
@@ -609,7 +614,7 @@ describe("Markra workspace", () => {
     const { container } = renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Markdown or Folder" }));
-    expect(await screen.findByText("Native")).toBeInTheDocument();
+    await expectVisibleMilkdownText(container, "Native");
 
     await waitFor(() => expect(mockedInstallNativeApplicationMenu).toHaveBeenCalled());
     const menuHandlers = mockedInstallNativeApplicationMenu.mock.calls.at(-1)?.[0] as NativeMenuHandlers & {
