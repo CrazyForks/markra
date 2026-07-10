@@ -617,13 +617,13 @@ jobs:
               tap_branch="${ref#refs/heads/}"
               break
             fi
-          done < <(git -c http.extraheader="AUTHORIZATION: bearer ${HOMEBREW_TAP_TOKEN}" ls-remote --symref "${tap_url}" HEAD)
+          done < <(git ls-remote --symref "${tap_url}" HEAD)
 
           tap_branch="${tap_branch:-main}"
           echo "HOMEBREW_TAP_BRANCH=${tap_branch}" >> "${GITHUB_ENV}"
 
-          if git -c http.extraheader="AUTHORIZATION: bearer ${HOMEBREW_TAP_TOKEN}" ls-remote --exit-code --heads "${tap_url}" "${tap_branch}" >/dev/null 2>&1; then
-            git -c http.extraheader="AUTHORIZATION: bearer ${HOMEBREW_TAP_TOKEN}" clone --depth 1 --branch "${tap_branch}" "${tap_url}" homebrew-tap
+          if git ls-remote --exit-code --heads "${tap_url}" "${tap_branch}" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "${tap_branch}" "${tap_url}" homebrew-tap
           else
             mkdir homebrew-tap
             git -C homebrew-tap init -b "${tap_branch}"
