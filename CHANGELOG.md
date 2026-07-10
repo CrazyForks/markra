@@ -1,3 +1,14 @@
+## [1.4.0](https://github.com/markrahq/markra/compare/v1.3.0...v1.4.0) (2026-07-10)
+
+### Features
+
+* **app:** add paragraph spacing and flexible windows ([#504](https://github.com/markrahq/markra/issues/504)) ([7dfe879](https://github.com/markrahq/markra/commit/7dfe8799eed14ea7e9c4a72f42f0f1b674a2f469))
+* import local files as attachments ([#506](https://github.com/markrahq/markra/issues/506)) ([d53234e](https://github.com/markrahq/markra/commit/d53234eb37e38f8f8be5a8b1e00fe3711cb381d9))
+
+### Bug Fixes
+
+* **desktop:** close settings with last user window ([#501](https://github.com/markrahq/markra/issues/501)) ([877a87f](https://github.com/markrahq/markra/commit/877a87f2bebe963d588e55cdc771d7c354e3b973))
+
 ## [1.3.0](https://github.com/markrahq/markra/compare/v1.2.5...v1.3.0) (2026-07-09)
 
 ### Features
