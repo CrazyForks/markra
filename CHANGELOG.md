@@ -1,3 +1,13 @@
+## [1.5.0](https://github.com/markrahq/markra/compare/v1.4.0...v1.5.0) (2026-07-12)
+
+### Features
+
+* **ai:** add chat image attachments ([#516](https://github.com/markrahq/markra/issues/516)) ([c2cb355](https://github.com/markrahq/markra/commit/c2cb35525a6446c161688b4a8f452e665f698faf))
+
+### Bug Fixes
+
+* **editor:** align caret during IME composition ([#517](https://github.com/markrahq/markra/issues/517)) ([f4ff1ef](https://github.com/markrahq/markra/commit/f4ff1ef09df7b648119bc54ce69059b7ceebbcd1))
+
 ## [1.4.0](https://github.com/markrahq/markra/compare/v1.3.0...v1.4.0) (2026-07-10)
 
 ### Features
