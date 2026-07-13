@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/markrahq/markra/compare/v1.5.0...v1.5.1) (2026-07-13)
+
+### Bug Fixes
+
+* **ai:** preserve reasoning metadata across tool calls ([#519](https://github.com/markrahq/markra/issues/519)) ([3043c47](https://github.com/markrahq/markra/commit/3043c47146a9eb36f08587d750a3d08d11c297e7))
+* **editor:** avoid Safari IME cursor widgets ([#522](https://github.com/markrahq/markra/issues/522)) ([50f16a1](https://github.com/markrahq/markra/commit/50f16a1a19f6511ee9323142fd0cd86a80cb933b))
+
 ## [1.5.0](https://github.com/markrahq/markra/compare/v1.4.0...v1.5.0) (2026-07-12)
 
 ### Features
