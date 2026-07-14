@@ -1,3 +1,10 @@
+## [1.6.0](https://github.com/markrahq/markra/compare/v1.5.1...v1.6.0) (2026-07-14)
+
+### Features
+
+* **editor:** add table fragment merge action ([#529](https://github.com/markrahq/markra/issues/529)) ([5802988](https://github.com/markrahq/markra/commit/58029884aea71f4fd4bd33e86da56b136ccbe171)), closes [#509](https://github.com/markrahq/markra/issues/509)
+* **files:** support global and workspace ignore rules ([#530](https://github.com/markrahq/markra/issues/530)) ([8ec1fb7](https://github.com/markrahq/markra/commit/8ec1fb71c175eb6b47e99c99fe03b1127f068861)), closes [#527](https://github.com/markrahq/markra/issues/527)
+
 ## [1.5.1](https://github.com/markrahq/markra/compare/v1.5.0...v1.5.1) (2026-07-13)
 
 ### Bug Fixes
