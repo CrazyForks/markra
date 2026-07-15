@@ -545,6 +545,7 @@ describe("NativeTitleBar", () => {
     const openMarkdown = vi.fn();
     const saveMarkdown = vi.fn();
     const saveMarkdownAs = vi.fn();
+    const syncNow = vi.fn();
     const exportPdf = vi.fn();
     const openSettings = vi.fn();
     const showAbout = vi.fn();
@@ -584,6 +585,7 @@ describe("NativeTitleBar", () => {
           formatBold,
           aiPolish: runAiPolish,
           saveDocumentAs: saveMarkdownAs,
+          syncNow,
           toggleAiCommand,
           toggleAllFolds
         }}
@@ -623,6 +625,12 @@ describe("NativeTitleBar", () => {
     expect(saveAsItem).not.toBeDisabled();
     fireEvent.click(saveAsItem);
     expect(saveMarkdownAs).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "File" }));
+    const syncItem = screen.getByRole("menuitem", { name: "Sync now Ctrl+Alt+R" });
+    expect(syncItem).not.toBeDisabled();
+    fireEvent.click(syncItem);
+    expect(syncNow).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "File" }));
     const exportMenuItem = screen.getByRole("menuitem", { name: "Export" });

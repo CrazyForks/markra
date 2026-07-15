@@ -3684,6 +3684,7 @@ function WorkspaceApp() {
     runEditorShortcut: handleRunEditorShortcut,
     saveDocument: handleSaveDocument,
     saveDocumentAs,
+    syncNow: runWorkspaceSync,
     toggleAiAgent: aiFeatureEnabled ? handleAiAgentToggle : undefined,
     toggleAiCommand: aiFeatureEnabled ? handleAiCommandToggle : undefined,
     toggleDocumentHistory: handleDocumentHistoryOpen,
@@ -3714,6 +3715,7 @@ function WorkspaceApp() {
     platform: desktopPlatform,
     saveDocument: handleSaveDocument,
     saveDocumentAs,
+    syncNow: runWorkspaceSync,
     toggleAiAgent: aiFeatureEnabled ? handleAiAgentToggle : undefined,
     toggleAiCommand: aiFeatureEnabled ? handleAiCommandToggle : undefined,
     toggleDocumentHistory: handleDocumentHistoryOpen,
@@ -4259,6 +4261,7 @@ function WorkspaceApp() {
           markdownFilesResizing={fileTreeResizing}
           markdownFilesWidth={fileTreeWidth}
           menuHandlers={nativeMenuHandlers}
+          syncNowShortcut={editorPreferences.preferences.markdownShortcuts.syncNow}
           nativeWindowChrome={nativeWindowChromeEnabled}
           openMarkdownButtonVisible={viewModeChrome.openButton}
           quickCreateMarkdownFileVisible={viewModeChrome.quickCreateButton && !visibleFileTreeOpen}
