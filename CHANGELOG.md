@@ -1,3 +1,14 @@
+## [1.7.0](https://github.com/markrahq/markra/compare/v1.6.0...v1.7.0) (2026-07-16)
+
+### Features
+
+* **sync:** add manual sync menu command and shortcut ([#532](https://github.com/markrahq/markra/issues/532)) ([72eea92](https://github.com/markrahq/markra/commit/72eea92df8eee015157fd2635ba45be76058000b)), closes [#521](https://github.com/markrahq/markra/issues/521)
+
+### Bug Fixes
+
+* **app:** stabilize titlebar popovers across platforms ([#538](https://github.com/markrahq/markra/issues/538)) ([fbe8ca1](https://github.com/markrahq/markra/commit/fbe8ca1c7977890bd98ba8d0d19e120be57652fa))
+* **editor:** center table controls and use Lucide icons ([#534](https://github.com/markrahq/markra/issues/534)) ([083f52c](https://github.com/markrahq/markra/commit/083f52c5fb0e89acfae36fa40418ed441bd37089))
+
 ## [1.6.0](https://github.com/markrahq/markra/compare/v1.5.1...v1.6.0) (2026-07-14)
 
 ### Features
