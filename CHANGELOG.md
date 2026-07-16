@@ -1,3 +1,9 @@
+## [1.7.1](https://github.com/markrahq/markra/compare/v1.7.0...v1.7.1) (2026-07-16)
+
+### Bug Fixes
+
+* **app:** repair titlebar and AI panel layering ([#539](https://github.com/markrahq/markra/issues/539)) ([f2f6f29](https://github.com/markrahq/markra/commit/f2f6f299e1a90607aa7992b057df746b0a161de5))
+
 ## [1.7.0](https://github.com/markrahq/markra/compare/v1.6.0...v1.7.0) (2026-07-16)
 
 ### Features
