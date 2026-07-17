@@ -1,3 +1,11 @@
+## [1.7.2](https://github.com/markrahq/markra/compare/v1.7.1...v1.7.2) (2026-07-17)
+
+### Bug Fixes
+
+* **app:** stabilize quick open keyboard navigation ([#546](https://github.com/markrahq/markra/issues/546)) ([199e5f4](https://github.com/markrahq/markra/commit/199e5f4ec5f25b6c0312be78477a5f64b85f6b14))
+* **settings:** clarify shortcut conflicts ([#545](https://github.com/markrahq/markra/issues/545)) ([f33cd6c](https://github.com/markrahq/markra/commit/f33cd6c3be4c2c3b6eca93a4b3249045ca2cecba)), closes [#540](https://github.com/markrahq/markra/issues/540)
+* **sync:** avoid duplicate WebDAV path separators ([#547](https://github.com/markrahq/markra/issues/547)) ([6003375](https://github.com/markrahq/markra/commit/60033757c3c8ebc0fd09d895bb7598998c7fbb4c))
+
 ## [1.7.1](https://github.com/markrahq/markra/compare/v1.7.0...v1.7.1) (2026-07-16)
 
 ### Bug Fixes
