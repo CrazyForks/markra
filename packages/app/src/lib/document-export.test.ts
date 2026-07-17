@@ -53,6 +53,29 @@ describe("document export helpers", () => {
     expect(html).toContain(".markdown-export pre,\n  .markdown-export pre code {\n    white-space: pre-wrap;\n    overflow-wrap: anywhere;\n  }");
   });
 
+  it("uses lining figures so exported digits have a consistent height", () => {
+    const html = buildMarkdownHtmlDocument({
+      bodyHtml: "<p>Mock IDs A64, A064, A55, A054, A39, and A039.</p>",
+      title: "Mock numeric export"
+    });
+    const exportRule = html.match(/\.markdown-export \{([^}]*)\}/u)?.[1];
+
+    expect(exportRule).toContain("font-variant-numeric: lining-nums;");
+  });
+
+  it("uses a unified CJK serif stack for Simplified Chinese exports", () => {
+    const html = buildMarkdownHtmlDocument({
+      bodyHtml: "<p>示例12345</p>",
+      language: "zh-CN",
+      title: "Mock CJK export"
+    });
+    const simplifiedChineseRule = html.match(/:root:lang\(zh-CN\),[\s\S]*?\{([^}]*)\}/u)?.[1] ?? "";
+
+    expect(simplifiedChineseRule).toMatch(
+      /font-family: "Noto Serif CJK SC",[\s\S]*"Songti SC",[\s\S]*ui-serif/u
+    );
+  });
+
   it("removes rendered pure LaTeX macro definition blocks from standalone documents", () => {
     const html = buildMarkdownHtmlDocument({
       bodyHtml: [
