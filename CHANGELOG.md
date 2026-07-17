@@ -1,3 +1,13 @@
+## [1.7.3](https://github.com/markrahq/markra/compare/v1.7.2...v1.7.3) (2026-07-17)
+
+### Bug Fixes
+
+* **ai:** allow inline chat to reuse agent model ([#554](https://github.com/markrahq/markra/issues/554)) ([f1d4ef4](https://github.com/markrahq/markra/commit/f1d4ef4bc2e64b576a151de9d3f3e81351a147a0))
+* **ai:** include client version in ACP initialization ([#553](https://github.com/markrahq/markra/issues/553)) ([bcbff80](https://github.com/markrahq/markra/commit/bcbff8045f4c1379d75d6f6420cf61117808b8fc)), closes [#544](https://github.com/markrahq/markra/issues/544)
+* **editor:** render paired inline HTML tags ([#550](https://github.com/markrahq/markra/issues/550)) ([5513ae2](https://github.com/markrahq/markra/commit/5513ae2e95f1334396b0c1279d81a953a3f304a4)), closes [#543](https://github.com/markrahq/markra/issues/543)
+* **editor:** stabilize visual markdown escaping ([#548](https://github.com/markrahq/markra/issues/548)) ([c5a260e](https://github.com/markrahq/markra/commit/c5a260e133861fc1295c00f1afd64dc65957a5ae)), closes [#542](https://github.com/markrahq/markra/issues/542)
+* **export:** improve numeral rendering in exported documents ([#552](https://github.com/markrahq/markra/issues/552)) ([711f2dd](https://github.com/markrahq/markra/commit/711f2dd3b6c01e6b4742acd6f6ff5349823d085b))
+
 ## [1.7.2](https://github.com/markrahq/markra/compare/v1.7.1...v1.7.2) (2026-07-17)
 
 ### Bug Fixes
