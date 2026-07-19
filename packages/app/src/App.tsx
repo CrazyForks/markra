@@ -115,6 +115,10 @@ import {
 } from "./lib/workspace-operation-animation";
 import { shouldBlockLargeMarkdownVisual } from "./lib/large-markdown";
 import { markAppPerformance } from "./lib/performance-marks";
+import {
+  moveMarkdownTreeFileWithLinks,
+  type MarkdownTreeMoveDocumentUpdate
+} from "./lib/markdown-tree-move";
 import { replaceMovedPath, sameNativePath } from "./lib/path-move";
 import { createAppSpellcheckerForLanguage } from "./lib/spellcheck";
 import { editorContentWidthPixels, shouldShowEditorWidthResizer } from "./lib/editor-width";
@@ -748,6 +752,7 @@ function WorkspaceApp() {
     tabs: documentTabs,
     activeTabId,
     closeMarkdownTab,
+    getDirtyMarkdownFileContent,
     handleDroppedMarkdownPath,
     handleMarkdownChange,
     handleMarkdownTabChange,
@@ -1118,7 +1123,8 @@ function WorkspaceApp() {
   }, [persistSideDocumentGroupPathUpdate, replaceOpenDocumentFile]);
   const applyMovedTreeFile = useCallback((
     previousFile: NativeMarkdownFolderFile,
-    movedFile: NativeMarkdownFolderFile
+    movedFile: NativeMarkdownFolderFile,
+    documentUpdate?: MarkdownTreeMoveDocumentUpdate
   ) => {
     const moveFolderFile = (file: NativeMarkdownFolderFile): NativeMarkdownFolderFile => {
       const nextPath = replaceMovedPath(file.path, previousFile.path, movedFile.path);
@@ -1132,7 +1138,7 @@ function WorkspaceApp() {
       };
     };
 
-    replaceMovedOpenDocumentFile(previousFile.path, movedFile);
+    replaceMovedOpenDocumentFile(previousFile.path, movedFile, documentUpdate);
     persistSideDocumentGroupPathUpdate({
       nextPath: movedFile.path,
       previousPath: previousFile.path
@@ -1143,6 +1149,20 @@ function WorkspaceApp() {
     }));
     setActiveImageFile((currentFile) => currentFile ? moveFolderFile(currentFile) : currentFile);
   }, [persistSideDocumentGroupPathUpdate, replaceMovedOpenDocumentFile]);
+  const moveTreeFileWithLinks = useCallback(async (
+    file: NativeMarkdownFolderFile,
+    targetParentPath: string | null
+  ) => {
+    const result = await moveMarkdownTreeFileWithLinks(file, targetParentPath, {
+      dirtyContent: file.kind ? null : getDirtyMarkdownFileContent(file.path),
+      moveFile: moveMarkdownTreeFile,
+      readFile: readNativeMarkdownFile,
+      saveFile: saveNativeMarkdownFile
+    });
+    if (result) applyMovedTreeFile(file, result.file, result.document);
+
+    return result?.file ?? null;
+  }, [applyMovedTreeFile, getDirtyMarkdownFileContent, moveMarkdownTreeFile]);
   const getAiDocumentContent = useCallback(
     () => (document.open ? readCurrentMarkdownForDocument(document.content) : document.content),
     [document.content, document.open, readCurrentMarkdownForDocument]
@@ -1175,12 +1195,7 @@ function WorkspaceApp() {
       operations: createWorkspaceChangePlanOperations({
         createFile: createMarkdownTreeFile,
         createFolder: createMarkdownTreeFolder,
-        moveFile: async (file, targetParentPath) => {
-          const movedFile = await moveMarkdownTreeFile(file, targetParentPath);
-          if (movedFile) applyMovedTreeFile(file, movedFile);
-
-          return movedFile;
-        },
+        moveFile: moveTreeFileWithLinks,
         readFile: readAiWorkspaceFile,
         renameFile: async (file, fileName) => {
           const renamedFile = await renameMarkdownTreeFile(file, fileName);
@@ -1206,14 +1221,13 @@ function WorkspaceApp() {
     await refreshMarkdownFileTree(document.path);
     return result;
   }, [
-    applyMovedTreeFile,
     applyRenamedTreeFile,
     createMarkdownTreeFile,
     createMarkdownTreeFolder,
     document.path,
     fileTreeFiles,
     fileTreeSourcePath,
-    moveMarkdownTreeFile,
+    moveTreeFileWithLinks,
     readAiWorkspaceFile,
     refreshMarkdownFileTree,
     renameMarkdownTreeFile,
@@ -2376,12 +2390,11 @@ function WorkspaceApp() {
     targetParentPath: string | null
   ) => {
     try {
-      const movedFile = await moveMarkdownTreeFile(file, targetParentPath);
-      if (movedFile) applyMovedTreeFile(file, movedFile);
+      await moveTreeFileWithLinks(file, targetParentPath);
     } catch {
       // Keep the existing tree state if the native move fails.
     }
-  }, [applyMovedTreeFile, moveMarkdownTreeFile]);
+  }, [moveTreeFileWithLinks]);
   const handleDeleteMarkdownTreeFile = useCallback(async (
     file: NativeMarkdownFolderFile,
     context?: { files: readonly NativeMarkdownFolderFile[] }

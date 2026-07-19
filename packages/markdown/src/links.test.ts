@@ -1,7 +1,8 @@
 import {
   findMarkdownUnlinkedMentions,
   parseMarkdownLinkReferences,
-  parseMarkdownMentionRanges
+  parseMarkdownMentionRanges,
+  rebaseMarkdownLocalLinks
 } from "./links";
 
 describe("markdown links", () => {
@@ -35,6 +36,85 @@ describe("markdown links", () => {
       }
     ]);
   });
+
+  it("rebases local image and attachment links when a document moves", () => {
+    const markdown = [
+      "![Diagram](assets/diagram.png)",
+      "[Reference](assets/Reference%20Doc.pdf)",
+      "[Nested](../shared/data.csv?download=1#latest)"
+    ].join("\n");
+
+    expect(rebaseMarkdownLocalLinks(markdown, "notes/daily.md", "archive/daily.md")).toBe([
+      "![Diagram](../notes/assets/diagram.png)",
+      "[Reference](../notes/assets/Reference%20Doc.pdf)",
+      "[Nested](../shared/data.csv?download=1#latest)"
+    ].join("\n"));
+  });
+
+  it("rebases reference definitions while preserving local-only boundaries", () => {
+    const markdown = [
+      "![Diagram][diagram]",
+      "[Reference][reference]",
+      "",
+      "[diagram]: <assets/diagram (wide).png> \"Wide diagram\"",
+      "[reference]: assets/reference.pdf 'Reference'",
+      "",
+      "[Remote](https://example.test/file.pdf)",
+      "[Anchor](#section)",
+      "[Root](/assets/root.png)",
+      "",
+      "```md",
+      "![Code](assets/code.png)",
+      "```"
+    ].join("\n");
+
+    expect(rebaseMarkdownLocalLinks(markdown, "notes/daily.md", "archive/daily.md")).toBe([
+      "![Diagram][diagram]",
+      "[Reference][reference]",
+      "",
+      "[diagram]: <../notes/assets/diagram%20%28wide%29.png> \"Wide diagram\"",
+      "[reference]: ../notes/assets/reference.pdf 'Reference'",
+      "",
+      "[Remote](https://example.test/file.pdf)",
+      "[Anchor](#section)",
+      "[Root](/assets/root.png)",
+      "",
+      "```md",
+      "![Code](assets/code.png)",
+      "```"
+    ].join("\n"));
+  });
+
+  it("returns the original markdown when the document directory does not change", () => {
+    const markdown = "![Diagram](assets/diagram.png)";
+
+    expect(rebaseMarkdownLocalLinks(markdown, "notes/daily.md", "notes/renamed.md")).toBe(markdown);
+  });
+
+  it("keeps self references and query-only links attached to the moved document", () => {
+    const markdown = [
+      "[Self](daily.md#section)",
+      "[Dot self](./daily.md)",
+      "[Query](?preview=1)"
+    ].join("\n");
+
+    expect(rebaseMarkdownLocalLinks(markdown, "notes/daily.md", "archive/daily.md")).toBe(markdown);
+  });
+
+  it("rebases many local links without repeatedly copying the whole document", () => {
+    const markdown = Array.from(
+      { length: 15_000 },
+      (_, index) => `![Asset ${index}](assets/asset-${index}.png)`
+    ).join("\n");
+    const startedAt = performance.now();
+
+    const rebased = rebaseMarkdownLocalLinks(markdown, "notes/daily.md", "archive/daily.md");
+    const elapsed = performance.now() - startedAt;
+
+    expect(rebased).toContain("![Asset 0](../notes/assets/asset-0.png)");
+    expect(rebased).toContain("![Asset 14999](../notes/assets/asset-14999.png)");
+    expect(elapsed).toBeLessThan(5_000);
+  }, 15_000);
 
   it("finds unlinked mentions outside existing links and code", () => {
     const markdown = [
