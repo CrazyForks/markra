@@ -1,3 +1,13 @@
+## [1.7.4](https://github.com/markrahq/markra/compare/v1.7.3...v1.7.4) (2026-07-19)
+
+### Features
+
+* **editor:** add source line numbers ([#555](https://github.com/markrahq/markra/issues/555)) ([81c6174](https://github.com/markrahq/markra/commit/81c617419a628d8a97e891bab7e3426442e8aa2d)), closes [#537](https://github.com/markrahq/markra/issues/537)
+
+### Bug Fixes
+
+* **app:** preserve local links when moving notes ([#558](https://github.com/markrahq/markra/issues/558)) ([26bf651](https://github.com/markrahq/markra/commit/26bf65112beded2bea438e581a1f27a75fce0e84)), closes [#556](https://github.com/markrahq/markra/issues/556)
+
 ## [1.7.3](https://github.com/markrahq/markra/compare/v1.7.2...v1.7.3) (2026-07-17)
 
 ### Bug Fixes
